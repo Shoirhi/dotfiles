@@ -48,6 +48,15 @@ else
   echo "Claude Code is already installed."
 fi
 
+# Playwrightインストール
+if ! npx playwright --version &>/dev/null 2>&1; then
+  echo "Installing Playwright..."
+  npm install -g playwright
+  npx playwright install --with-deps chromium
+else
+  echo "Playwright is already installed."
+fi
+
 # macOS設定
 echo "Applying macOS settings..."
 bash "$DOTFILES_DIR/macos.sh"
