@@ -3,7 +3,8 @@
   "env": {
     "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1",
     "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
-    "CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR": "1"
+    "CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR": "1",
+    "CLAUDE_CODE_NO_FLICKER": "1"
   },
   "permissions": {
     "allow": [
@@ -106,7 +107,9 @@
       "Edit(**/*.yml)",
       "Edit(**/*.yaml)",
       "Edit(**/*.md)",
-      "WebFetch(domain:www.figma.com)"
+      "WebFetch(domain:www.figma.com)",
+      "WebFetch(domain:fonts.googleapis.com)",
+      "WebFetch(domain:fonts.gstatic.com)"
     ],
     "deny": [
       "mcp__chrome-devtools__click",
@@ -114,7 +117,6 @@
       "mcp__chrome-devtools__fill_form",
       "mcp__chrome-devtools__hover",
       "mcp__chrome-devtools__navigate_page",
-      "Bash(rm:*)",
       "Bash(chmod 777:*)",
       "Bash(chown:*)",
       "Bash(sudo:*)",
@@ -139,7 +141,8 @@
       "Bash(git reset*)",
       "Bash(npm install*)",
       "Bash(npm ci*)",
-      "Bash(npm publish*)"
+      "Bash(npm publish*)",
+      "Bash(rm:*)"
     ],
     "disableBypassPermissionsMode": "disable"
   },
@@ -194,7 +197,7 @@
   },
   "statusLine": {
     "type": "command",
-    "command": "sh /Users/shoirhi/.claude/statusline.sh"
+    "command": "sh $HOME/.claude/statusline.sh"
   },
   "enabledPlugins": {
     "figma@claude-plugins-official": true,
