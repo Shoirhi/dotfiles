@@ -33,8 +33,11 @@ elif [[ -f /usr/local/bin/brew ]]; then
 fi
 
 # Brewfileでパッケージインストール（インストール済みはスキップ、アップグレードしない）
+# 一部のcaskがインストールエラーになっても他のパッケージは継続する
 echo "Installing packages from Brewfile..."
-brew bundle --file="$DOTFILES_DIR/Brewfile" --no-upgrade
+if ! brew bundle --file="$DOTFILES_DIR/Brewfile" --no-upgrade --no-lock 2>&1; then
+  echo "Warning: Some packages failed to install (see above). Continuing..."
+fi
 echo "Done."
 
 # Claude Codeインストール
@@ -57,6 +60,21 @@ link_file "$DOTFILES_DIR/git/ignore" "$HOME/.config/git/ignore"
 # Ghostty設定
 link_file "$DOTFILES_DIR/ghostty/config" "$HOME/.config/ghostty/config"
 
+# Ghosttyテーマインストール（Catppuccin）
+GHOSTTY_THEMES_DIR="$HOME/.config/ghostty/themes"
+if [[ ! -f "$GHOSTTY_THEMES_DIR/catppuccin-frappe" ]]; then
+  echo "Installing Catppuccin theme for Ghostty..."
+  mkdir -p "$GHOSTTY_THEMES_DIR"
+  TMPDIR_CATPPUCCIN="$(mktemp -d)"
+  git clone --depth 1 https://github.com/catppuccin/ghostty.git "$TMPDIR_CATPPUCCIN"
+  for f in "$TMPDIR_CATPPUCCIN/themes/"*.conf; do
+    cp "$f" "$GHOSTTY_THEMES_DIR/$(basename "${f%.conf}")"
+  done
+  rm -rf "$TMPDIR_CATPPUCCIN"
+else
+  echo "Catppuccin theme for Ghostty is already installed."
+fi
+
 # Neovim設定（ディレクトリごとリンク）
 link_file "$DOTFILES_DIR/nvim" "$HOME/.config/nvim"
 
@@ -74,6 +92,6 @@ link_file "$DOTFILES_DIR/claude/settings.json" "$HOME/.claude/settings.json"
 link_file "$DOTFILES_DIR/claude/statusline.sh" "$HOME/.claude/statusline.sh"
 link_file "$DOTFILES_DIR/claude/rules" "$HOME/.claude/rules"
 link_file "$DOTFILES_DIR/claude/skills" "$HOME/.claude/skills"
-link_file "$DOTFILES_DIR/claude/commands" "$HOME/.claude/commands"
+link_file "$DOTFILES_DIR/claude/agents" "$HOME/.claude/agents"
 
 echo "Setup complete!"
