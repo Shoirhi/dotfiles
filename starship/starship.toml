@@ -1,0 +1,117 @@
+"$schema" = "https://starship.rs/config-schema.json"
+
+add_newline = true
+format = """
+$directory\
+$git_branch\
+$git_status\
+$fill\
+$cmd_duration\
+$time\
+$line_break\
+$character"""
+
+command_timeout = 1000
+palette = "catppuccin_frappe"
+
+[fill]
+symbol = " "
+
+[character]
+success_symbol = "[>](bold green)"
+error_symbol = "[>](bold red)"
+vicmd_symbol = "[N](bold mauve) [>](bold green)"
+
+[directory]
+truncation_length = 4
+truncation_symbol = ".../"
+style = "bold blue"
+read_only = " 󰌾"
+read_only_style = "bold red"
+
+[git_branch]
+format = "[$symbol$branch(:$remote_branch)]($style) "
+style = "bold mauve"
+symbol = "\ue0a0 "
+
+[git_status]
+format = "([$all_status$ahead_behind]($style))"
+style = "bold red"
+conflicted = "\uf0e7 ${count} "
+ahead = "\uf062 ${count} "
+behind = "\uf063 ${count} "
+diverged = "\uf062 ${ahead_count} \uf063 ${behind_count} "
+untracked = "\uf128 ${count} "
+stashed = "\uf01c ${count} "
+modified = "\uf040 ${count} "
+staged = "\uf067 ${count} "
+deleted = "\uf014 ${count} "
+
+[nodejs]
+disabled = true
+
+[bun]
+disabled = true
+
+[deno]
+disabled = true
+
+[package]
+disabled = true
+
+[cmd_duration]
+min_time = 2_000
+format = "[󰅐 $duration]($style) "
+style = "bold yellow"
+
+[time]
+disabled = false
+format = "[$time]($style)"
+style = "bold text"
+time_format = "%H:%M"
+
+[aws]
+disabled = true
+
+[docker_context]
+disabled = true
+
+[kubernetes]
+disabled = true
+
+[golang]
+disabled = true
+
+[rust]
+disabled = true
+
+[python]
+disabled = true
+
+[palettes.catppuccin_frappe]
+rosewater = "#f2d5cf"
+flamingo = "#eebebe"
+pink = "#f4b8e4"
+mauve = "#ca9ee6"
+red = "#e78284"
+maroon = "#ea999c"
+peach = "#ef9f76"
+yellow = "#e5c890"
+green = "#a6d189"
+teal = "#81c8be"
+sky = "#99d1db"
+sapphire = "#85c1dc"
+blue = "#8caaee"
+lavender = "#babbf1"
+text = "#c6d0f5"
+subtext1 = "#b5bfe2"
+subtext0 = "#a5adce"
+overlay2 = "#949cbb"
+overlay1 = "#838ba7"
+overlay0 = "#737994"
+surface2 = "#626880"
+surface1 = "#51576d"
+surface0 = "#414559"
+base = "#303446"
+mantle = "#292c3c"
+crust = "#232634"

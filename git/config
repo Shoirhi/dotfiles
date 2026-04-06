@@ -1,0 +1,37 @@
+[user]
+	name = Shoirhi
+	email = cruces.dibs6i@icloud.com
+
+[init]
+	defaultBranch = main
+
+[pull]
+	rebase = true
+
+[push]
+	autoSetupRemote = true
+
+[fetch]
+	prune = true
+
+[merge]
+	conflictstyle = zdiff3
+
+[diff]
+	algorithm = histogram
+	colorMoved = default
+
+[rebase]
+	autoStash = true
+	autoSquash = true
+
+[rerere]
+	enabled = true
+
+[core]
+	excludesfile = ~/.config/git/ignore
+	editor = nvim
+	pager = bat --plain
+
+[color]
+	ui = auto

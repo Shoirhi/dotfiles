@@ -1,0 +1,227 @@
+{
+  "cleanupPeriodDays": 14,
+  "env": {
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1",
+    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
+    "CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR": "1"
+  },
+  "permissions": {
+    "allow": [
+      "mcp__plugin_chrome-devtools-mcp_chrome-devtools__list_pages",
+      "mcp__plugin_chrome-devtools-mcp_chrome-devtools__navigate_page",
+      "mcp__plugin_chrome-devtools-mcp_chrome-devtools__resize_page",
+      "mcp__plugin_chrome-devtools-mcp_chrome-devtools__take_screenshot",
+      "mcp__plugin_chrome-devtools-mcp_chrome-devtools__evaluate_script",
+      "mcp__plugin_chrome-devtools-mcp_chrome-devtools__take_snapshot",
+      "mcp__chrome-devtools__new_page",
+      "mcp__chrome-devtools__list_pages",
+      "mcp__chrome-devtools__take_snapshot",
+      "mcp__chrome-devtools__take_screenshot",
+      "mcp__chrome-devtools__console_messages",
+      "mcp__chrome-devtools__network_get_requests",
+      "mcp__chrome-devtools__evaluate_javascript",
+      "mcp__chrome-devtools__evaluate_script",
+      "mcp__chrome-devtools__performance_start_trace",
+      "mcp__chrome-devtools__performance_stop_trace",
+      "mcp__chrome-devtools__performance_get_insights",
+      "mcp__chrome-devtools__performance_analyze_insight",
+      "mcp__chrome-devtools__emulate_cpu",
+      "mcp__chrome-devtools__emulate",
+      "mcp__chrome-devtools__emulate_network",
+      "mcp__chrome-devtools__resize_page",
+      "mcp__claude_ai_figma__*",
+      "mcp__plugin_figma_figma__get_screenshot",
+      "mcp__plugin_figma_figma__get_design_context",
+      "Bash(ls:*)",
+      "Bash(cat:*)",
+      "Bash(find:*)",
+      "Bash(head:*)",
+      "Bash(tail:*)",
+      "Bash(cd:*)",
+      "Bash(grep:*)",
+      "Bash(rg:*)",
+      "Bash(echo:*)",
+      "Bash(mkdir:*)",
+      "Bash(touch:*)",
+      "Bash(mv:*)",
+      "Bash(sed:*)",
+      "Bash(wc:*)",
+      "Bash(sort:*)",
+      "Bash(git status*)",
+      "Bash(git diff*)",
+      "Bash(git log*)",
+      "Bash(git add*)",
+      "Bash(git commit*)",
+      "Bash(git branch*)",
+      "Bash(git checkout*)",
+      "Bash(git switch*)",
+      "Bash(git stash*)",
+      "Bash(git fetch*)",
+      "Bash(git merge*)",
+      "Bash(git rebase*)",
+      "Bash(git show*)",
+      "Bash(git blame*)",
+      "Bash(npm run *)",
+      "Bash(npm test*)",
+      "Bash(npm list*)",
+      "Bash(npm outdated*)",
+      "Bash(npx:*)",
+      "Read(src/**)",
+      "Read(assets/**)",
+      "Read(**/*.php)",
+      "Read(**/*.css)",
+      "Read(**/*.scss)",
+      "Read(**/*.js)",
+      "Read(**/*.ts)",
+      "Read(**/*.jsx)",
+      "Read(**/*.tsx)",
+      "Read(**/*.json)",
+      "Read(**/*.md)",
+      "Read(**/*.txt)",
+      "Read(**/*.html)",
+      "Read(**/*.twig)",
+      "Read(**/*.yml)",
+      "Read(**/*.yaml)",
+      "Read(**/*.xml)",
+      "Read(**/*.svg)",
+      "Read(**/*.png)",
+      "Read(**/*.jpg)",
+      "Read(**/*.jpeg)",
+      "Read(**/*.gif)",
+      "Read(**/*.webp)",
+      "Read(**/*.ico)",
+      "Read(**/*.bmp)",
+      "Edit(src/**)",
+      "Edit(assets/**)",
+      "Edit(**/*.php)",
+      "Edit(**/*.css)",
+      "Edit(**/*.scss)",
+      "Edit(**/*.js)",
+      "Edit(**/*.ts)",
+      "Edit(**/*.jsx)",
+      "Edit(**/*.tsx)",
+      "Edit(**/*.json)",
+      "Edit(**/*.html)",
+      "Edit(**/*.twig)",
+      "Edit(**/*.yml)",
+      "Edit(**/*.yaml)",
+      "Edit(**/*.md)",
+      "WebFetch(domain:www.figma.com)"
+    ],
+    "deny": [
+      "mcp__chrome-devtools__click",
+      "mcp__chrome-devtools__fill",
+      "mcp__chrome-devtools__fill_form",
+      "mcp__chrome-devtools__hover",
+      "mcp__chrome-devtools__navigate_page",
+      "Bash(rm:*)",
+      "Bash(chmod 777:*)",
+      "Bash(chown:*)",
+      "Bash(sudo:*)",
+      "Bash(rmdir:*)",
+      "Bash(kill:*)",
+      "Bash(killall:*)",
+      "Bash(git push --force*)",
+      "Read(**/.env)",
+      "Read(**/.env.*)",
+      "Read(**/secrets/**)",
+      "Read(**/.ssh/**)",
+      "Read(**/.aws/**)",
+      "Read(**/.gnupg/**)",
+      "Edit(/etc/**)",
+      "Edit(/usr/**)",
+      "Edit(/sys/**)"
+    ],
+    "ask": [
+      "Bash(curl:*)",
+      "Bash(wget:*)",
+      "Bash(git push*)",
+      "Bash(git reset*)",
+      "Bash(npm install*)",
+      "Bash(npm ci*)",
+      "Bash(npm publish*)"
+    ],
+    "disableBypassPermissionsMode": "disable"
+  },
+  "enableAllProjectMcpServers": false,
+  "hooks": {
+    "Notification": [
+      {
+        "matcher": "permission_prompt",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "osascript -e 'display notification \"承認が必要です\" with title \"Claude Code\" subtitle \"Permission Required\" sound name \"Ping\"'",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "osascript -e 'display notification \"タスクが完了しました\" with title \"Claude Code\" subtitle \"Task Complete\" sound name \"Glass\"'",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [[ \"$CLAUDE_TOOL_INPUT_FILE_PATH\" =~ \\.(js|jsx|ts|tsx|css)$ ]]; then npx prettier --write \"$CLAUDE_TOOL_INPUT_FILE_PATH\" 2>&1 && echo '{\"feedback\": \"Formatted.\", \"suppressOutput\": true}'; fi"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "command=$(echo \"$CLAUDE_TOOL_INPUT\" | jq -r '.command // empty') && if echo \"$command\" | grep -qE 'git\\s+push.*--force'; then echo '{\"error\": \"force pushは禁止です。通常のpushを使ってください。\"}' >&2; exit 2; fi"
+          }
+        ]
+      }
+    ]
+  },
+  "statusLine": {
+    "type": "command",
+    "command": "sh /Users/shoirhi/.claude/statusline.sh"
+  },
+  "enabledPlugins": {
+    "figma@claude-plugins-official": true,
+    "skill-creator@claude-plugins-official": true,
+    "chrome-devtools-mcp@chrome-devtools-plugins": true
+  },
+  "extraKnownMarketplaces": {
+    "anthropic-agent-skills": {
+      "source": {
+        "source": "github",
+        "repo": "anthropics/skills"
+      }
+    },
+    "chrome-devtools-plugins": {
+      "source": {
+        "source": "github",
+        "repo": "ChromeDevTools/chrome-devtools-mcp"
+      }
+    }
+  },
+  "sandbox": {
+    "enabled": true,
+    "autoAllowBashIfSandboxed": true,
+    "allowedDomains": [
+      "api.figma.com",
+      "www.figma.com",
+      "s3-alpha.figma.com"
+    ]
+  }
+}
