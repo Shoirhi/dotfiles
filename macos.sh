@@ -51,7 +51,6 @@ safe_defaults com.apple.dock autohide -bool true # Dock自動非表示
 safe_defaults com.apple.dock tilesize -int 50 # Dockアイコンサイズ
 safe_defaults com.apple.dock show-recents -bool false # 最近使ったアプリ非表示
 safe_defaults com.apple.dock orientation -string "left" # Dockを左側に配置
-safe_defaults com.apple.dock minimize-to-application -bool true # ウィンドウをアプリアイコンに最小化
 safe_defaults com.apple.dock mru-spaces -bool false # Spacesを最近の使用順に並べ替えない
 safe_defaults com.apple.dock expose-group-apps -bool true # Mission Controlでアプリをグループ化
 safe_defaults com.apple.dock wvous-tl-corner -int 0 # 左上: 何もしない
