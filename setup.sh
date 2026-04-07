@@ -35,7 +35,7 @@ fi
 # Brewfileでパッケージインストール（インストール済みはスキップ、アップグレードしない）
 # 一部のcaskがインストールエラーになっても他のパッケージは継続する
 echo "Installing packages from Brewfile..."
-if ! brew bundle --file="$DOTFILES_DIR/Brewfile" --no-upgrade --no-lock 2>&1; then
+if ! brew bundle --file="$DOTFILES_DIR/Brewfile" --no-upgrade 2>&1; then
   echo "Warning: Some packages failed to install (see above). Continuing..."
 fi
 echo "Done."
