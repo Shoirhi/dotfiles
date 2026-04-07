@@ -14,6 +14,7 @@
       "mcp__plugin_chrome-devtools-mcp_chrome-devtools__take_screenshot",
       "mcp__plugin_chrome-devtools-mcp_chrome-devtools__evaluate_script",
       "mcp__plugin_chrome-devtools-mcp_chrome-devtools__take_snapshot",
+      "mcp__plugin_chrome-devtools-mcp_chrome-devtools__press_key",
       "mcp__chrome-devtools__new_page",
       "mcp__chrome-devtools__list_pages",
       "mcp__chrome-devtools__take_snapshot",

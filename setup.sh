@@ -87,6 +87,9 @@ fi
 # Neovim設定（ディレクトリごとリンク）
 link_file "$DOTFILES_DIR/nvim" "$HOME/.config/nvim"
 
+# Zed設定
+link_file "$DOTFILES_DIR/zed/settings.json" "$HOME/.config/zed/settings.json"
+
 # Starship設定
 link_file "$DOTFILES_DIR/starship/starship.toml" "$HOME/.config/starship.toml"
 
