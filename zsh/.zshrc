@@ -83,3 +83,4 @@ if [[ -n "${HOMEBREW_PREFIX-}" ]]; then
   [[ -f "$_sh" ]] && source "$_sh"
   unset _as _sh
 fi
+export PATH="$HOME/.local/bin:$PATH"
