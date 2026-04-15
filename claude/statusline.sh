@@ -8,10 +8,10 @@ transcript=$(echo "$input" | jq -r '.transcript_path')
 todo_count=$([ -f "$transcript" ] && grep -c '"type":"todo"' "$transcript" 2>/dev/null || echo 0)
 time_now=$(date +%H:%M)
 
-# Truncate directory to last 4 segments (like starship truncation_length=4)
+# Truncate directory to last 2 segments
 seg_count=$(echo "$cwd" | tr '/' '\n' | wc -l | tr -d ' ')
-if [ "$seg_count" -gt 4 ]; then
-  cwd=".../"$(echo "$cwd" | rev | cut -d'/' -f1-4 | rev)
+if [ "$seg_count" -gt 2 ]; then
+  cwd=".../"$(echo "$cwd" | rev | cut -d'/' -f1-2 | rev)
 fi
 
 # Git info
