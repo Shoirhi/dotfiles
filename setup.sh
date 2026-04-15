@@ -97,6 +97,15 @@ link_file "$DOTFILES_DIR/starship/starship.toml" "$HOME/.config/starship.toml"
 link_file "$DOTFILES_DIR/zsh/.zshrc" "$HOME/.zshrc"
 link_file "$DOTFILES_DIR/zsh" "$HOME/.config/zsh"
 
+# Terminal.appプロファイル（Ghostty設定から生成・インポート）
+THEME_NAME=$(sed -n 's/^theme[[:space:]]*=[[:space:]]*//p' "$DOTFILES_DIR/ghostty/config" | head -1)
+TERMINAL_PROFILE="Ghostty - ${THEME_NAME:-catppuccin-frappe}"
+echo "Generating Terminal.app profile..."
+swift "$DOTFILES_DIR/terminal/generate-profile.swift" "$DOTFILES_DIR"
+defaults write com.apple.Terminal "Default Window Settings" "$TERMINAL_PROFILE"
+defaults write com.apple.Terminal "Startup Window Settings" "$TERMINAL_PROFILE"
+echo "Done."
+
 # Claude Code設定
 mkdir -p "$HOME/.claude"
 link_file "$DOTFILES_DIR/claude/CLAUDE.md" "$HOME/.claude/CLAUDE.md"
