@@ -93,6 +93,8 @@
       "Read(**/*.webp)",
       "Read(**/*.ico)",
       "Read(**/*.bmp)",
+      "Read(**/.env.example)",
+      "Read(**/.env.local.example)",
       "Edit(src/**)",
       "Edit(assets/**)",
       "Edit(**/*.php)",
@@ -110,7 +112,10 @@
       "Edit(**/*.md)",
       "WebFetch(domain:www.figma.com)",
       "WebFetch(domain:fonts.googleapis.com)",
-      "WebFetch(domain:fonts.gstatic.com)"
+      "WebFetch(domain:fonts.gstatic.com)",
+      "Skill(strap)",
+      "Bash(~/dotfiles/claude/skills/strap/strap *)",
+      "Read(~/dotfiles/claude/skills/strap/*)"
     ],
     "deny": [
       "mcp__chrome-devtools__click",
@@ -126,7 +131,7 @@
       "Bash(killall:*)",
       "Bash(git push --force*)",
       "Read(**/.env)",
-      "Read(**/.env.*)",
+      "Read(**/.env.local)",
       "Read(**/secrets/**)",
       "Read(**/.ssh/**)",
       "Read(**/.aws/**)",
@@ -137,6 +142,7 @@
     ],
     "ask": [
       "Bash(curl:*)",
+      "Read(**/.env.*)",
       "Bash(wget:*)",
       "Bash(git push*)",
       "Bash(git reset*)",
