@@ -1,0 +1,23 @@
+{
+  "skill_name": "why-review",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "goodpatch/sparkle-design-cli の PR #34 をレビューして",
+      "expected_output": "--strict フラグ追加とsilent failure修正のPRに対して、Why視点のレビューが出力される。変更サマリー、意図への質問、エッジケースの指摘、コミュニケーションガイドラインに沿ったコメントが含まれる。",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "goodpatch/sparkle-design-cli #26 のPRレビューをお願いします",
+      "expected_output": "CI/CD自動化のPRに対して、Why視点のレビューが出力される。なぜこのCI構成を選んだか、betaチャネル追加の意図、将来の拡張性についてのコメントが含まれる。",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "goodpatch/sparkle-design #254 をWhy視点でレビューして。ビジネス的な観点も含めて。",
+      "expected_output": "sparkle-config skill追加のPRに対して、ビジネス文脈を考慮したWhy視点のレビュー。なぜスキルというアプローチを選んだか、ドメイン適合性、将来設計についてのコメントが含まれる。",
+      "files": []
+    }
+  ]
+}

@@ -28,11 +28,6 @@ setopt HIST_IGNORE_DUPS HIST_IGNORE_SPACE SHARE_HISTORY APPEND_HISTORY INC_APPEN
 # Aliases
 source "$HOME/.config/zsh/aliases.zsh"
 
-# Vi mode
-bindkey -v
-export KEYTIMEOUT=20
-bindkey -M viins 'jk' vi-cmd-mode
-
 # Starship prompt (guard against double-sourcing to prevent zle-keymap-select recursion)
 if [[ -z "${__starship_initialized-}" ]]; then
   local _starship_bin; _starship_bin="$(command -v starship 2>/dev/null)"

@@ -1,0 +1,47 @@
+{
+  "eval_id": 1,
+  "eval_name": "strict-flag-pr",
+  "prompt": "goodpatch/sparkle-design-cli の PR #34 をレビューして",
+  "assertions": [
+    {
+      "id": "has-change-summary",
+      "description": "Review contains a change summary section describing what changed",
+      "type": "contains_section"
+    },
+    {
+      "id": "has-why-questions",
+      "description": "Review includes Why-focused questions or observations (keywords: なぜ, 意図, 理由, 背景, 目的)",
+      "type": "keyword_presence"
+    },
+    {
+      "id": "has-labeled-comments",
+      "description": "Comments use labels: [nit], [suggestion], [question], [praise], or [concern]",
+      "type": "label_presence"
+    },
+    {
+      "id": "code-as-subject",
+      "description": "Subject of feedback is 'the code', not 'you' (no あなたは...すべき patterns)",
+      "type": "negative_check"
+    },
+    {
+      "id": "no-how-only-comments",
+      "description": "Review does not primarily consist of typo/format/style-only comments",
+      "type": "qualitative"
+    },
+    {
+      "id": "has-overall-verdict",
+      "description": "Review includes an overall verdict/summary section",
+      "type": "contains_section"
+    },
+    {
+      "id": "has-praise",
+      "description": "At least one [praise] labeled comment exists",
+      "type": "label_presence"
+    },
+    {
+      "id": "business-context",
+      "description": "Review mentions business context, future design, or extensibility",
+      "type": "keyword_presence"
+    }
+  ]
+}

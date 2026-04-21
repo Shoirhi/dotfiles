@@ -1,0 +1,300 @@
+diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml
+new file mode 100644
+index 0000000..7d05296
+--- /dev/null
++++ b/.github/workflows/ci.yml
+@@ -0,0 +1,37 @@
++name: CI
++
++on:
++  push:
++    branches: [main]
++  pull_request:
++
++jobs:
++  lint-and-test:
++    runs-on: ubuntu-latest
++    steps:
++      - uses: actions/checkout@v4
++
++      - name: Prepare deploy key for sparkle-variables submodule
++        env:
++          DEPLOY_KEY: ${{ secrets.SUBMODULE_SSH_KEY }}
++        run: |
++          mkdir -p "$HOME/.ssh" && chmod 700 "$HOME/.ssh"
++          printf '%s\n' "$DEPLOY_KEY" > "$HOME/.ssh/submodule_key"
++          chmod 600 "$HOME/.ssh/submodule_key"
++          ssh-keyscan -t ed25519 github.com >> "$HOME/.ssh/known_hosts" 2>/dev/null
++
++      - name: Fetch submodules
++        run: |
++          export GIT_SSH_COMMAND="ssh -i $HOME/.ssh/submodule_key -o IdentitiesOnly=yes -o UserKnownHostsFile=$HOME/.ssh/known_hosts"
++          git submodule update --init --recursive
++
++      - uses: actions/setup-node@v4
++        with:
++          node-version: "20"
++          cache: "npm"
++
++      - run: npm ci
++
++      - run: npm run lint
++
++      - run: npm test
+diff --git a/.github/workflows/publish.yml b/.github/workflows/publish.yml
+new file mode 100644
+index 0000000..58764d5
+--- /dev/null
++++ b/.github/workflows/publish.yml
+@@ -0,0 +1,112 @@
++name: Publish to npm
++
++on:
++  workflow_dispatch:
++    inputs:
++      channel:
++        description: "Dist-tag を選択。auto は package.json の version から自動判定 (X.Y.Z-beta.N → beta / X.Y.Z → latest)。"
++        type: choice
++        required: true
++        default: auto
++        options:
++          - auto
++          - latest
++          - beta
++
++jobs:
++  publish:
++    runs-on: ubuntu-latest
++    permissions:
++      contents: read
++    steps:
++      - uses: actions/checkout@v4
++
++      - name: Prepare deploy key for sparkle-variables submodule
++        env:
++          DEPLOY_KEY: ${{ secrets.SUBMODULE_SSH_KEY }}
++        run: |
++          mkdir -p "$HOME/.ssh" && chmod 700 "$HOME/.ssh"
++          printf '%s\n' "$DEPLOY_KEY" > "$HOME/.ssh/submodule_key"
++          chmod 600 "$HOME/.ssh/submodule_key"
++          ssh-keyscan -t ed25519 github.com >> "$HOME/.ssh/known_hosts" 2>/dev/null
++
++      - name: Fetch submodules
++        run: |
++          export GIT_SSH_COMMAND="ssh -i $HOME/.ssh/submodule_key -o IdentitiesOnly=yes -o UserKnownHostsFile=$HOME/.ssh/known_hosts"
++          git submodule update --init --recursive
++
++      - uses: actions/setup-node@v4
++        with:
++          node-version: "20"
++          registry-url: "https://registry.npmjs.org"
++          cache: "npm"
++
++      - run: npm ci
++
++      - run: npm run lint
++
++      - run: npm test
++
++      - name: Determine dist-tag
++        id: tag
++        env:
++          INPUT_CHANNEL: ${{ inputs.channel }}
++        run: |
++          set -euo pipefail
++          VERSION=$(node -p "require('./package.json').version")
++
++          case "$VERSION" in
++            *-beta.*) AUTO="beta" ;;
++            *-*)      AUTO="unsupported" ;;
++            *)        AUTO="latest" ;;
++          esac
++
++          if [ "$INPUT_CHANNEL" = "auto" ]; then
++            CHANNEL="$AUTO"
++          else
++            CHANNEL="$INPUT_CHANNEL"
++          fi
++
++          if [ "$CHANNEL" = "unsupported" ]; then
++            echo "::error::未対応の prerelease version です: $VERSION (サポートは -beta.N のみ)"
++            exit 1
++          fi
++
++          case "$CHANNEL:$VERSION" in
++            latest:*-*)
++              echo "::error::prerelease version ($VERSION) は latest へ publish できません"
++              exit 1
++              ;;
++            beta:*-*) ;;
++            beta:*)
++              echo "::error::安定版 ($VERSION) は beta へ publish できません。-beta.N を付けてください"
++              exit 1
++              ;;
++          esac
++
++          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
++          echo "channel=$CHANNEL" >> "$GITHUB_OUTPUT"
++          echo "→ $VERSION を --tag $CHANNEL で publish します"
++
++      - name: npm publish
++        env:
++          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
++          PUBLISH_TAG: ${{ steps.tag.outputs.channel }}
++        run: npm publish --tag "$PUBLISH_TAG"
++
++      - name: Summary
++        env:
++          PUBLISHED_VERSION: ${{ steps.tag.outputs.version }}
++          PUBLISHED_TAG: ${{ steps.tag.outputs.channel }}
++        run: |
++          {
++            echo "### Published"
++            echo ""
++            echo "- package: \`sparkle-design-cli\`"
++            echo "- version: \`$PUBLISHED_VERSION\`"
++            echo "- dist-tag: \`$PUBLISHED_TAG\`"
++            echo ""
++            echo "\`\`\`"
++            echo "npx --yes sparkle-design-cli@$PUBLISHED_TAG --help"
++            echo "\`\`\`"
++          } >> "$GITHUB_STEP_SUMMARY"
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index e606efe..a209e87 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
+ 
+ ## [Unreleased]
+ 
++### Added
++
++- **GitHub Actions による CI / Publish 自動化**: `.github/workflows/ci.yml`（push / PR で lint + test を実行）と `.github/workflows/publish.yml`（workflow_dispatch で `npm publish`）を追加しました。`publish.yml` は `package.json` の version を見て dist-tag を自動判定します — `X.Y.Z` は `latest`、`X.Y.Z-beta.N` は `beta` に publish されます。workflow の `channel` input で明示指定も可能です。
++- **Beta チャネル対応**: 品質保証中の変更を `npx --yes sparkle-design-cli@beta` で先行検証できるようになりました。README に dist-tag 別のインストール手順とメンテナ向けリリース手順（GA 昇格方法含む）を追記しました。
++
++### Changed
++
++- **Lint クリーンアップ**: CI 導入に伴い eslint の `no-unused-vars` を整理しました。`^_` プレフィックスの変数を全般的に ignore するよう設定し、未使用 import (`FONT_DEFAULTS`) と dead code (`createFontImportBlock`) を削除しました。
++
+ ## [2.0.6] - 2026-04-17
+ 
+ ### Changed
+diff --git a/README.md b/README.md
+index 8c6984a..77024eb 100644
+--- a/README.md
++++ b/README.md
+@@ -31,6 +31,25 @@ npm install -g sparkle-design-cli
+ 
+ > `npx --yes sparkle-design-cli ...` で都度実行する運用を推奨します（常に最新版が利用されます）。
+ 
++### リリースチャネル
++
++npm の dist-tag でチャネルを分離しています。通常は latest を使い、品質保証中の変更を試したい場合のみ beta を指定してください。
++
++| チャネル | dist-tag | 用途 | 指定方法 |
++|---------|---------|------|---------|
++| 安定版 | `latest` | 本番運用向け。`npx --yes sparkle-design-cli` は常にこれを取得 | （デフォルト） |
++| Beta | `beta` | 品質保証中の検証用 | `npx --yes sparkle-design-cli@beta` |
++
++```bash
++# beta で setup を試す
++npx --yes sparkle-design-cli@beta setup --assistant claude
++
++# beta で check を試す
++npx --yes sparkle-design-cli@beta check src --strict
++```
++
++Beta バージョンは `X.Y.Z-beta.N` 形式で publish されます。GA（正式版）へ昇格するときは、beta の -beta.N を外した `X.Y.Z` を改めて publish します。
++
+ ## 使用方法
+ 
+ ### サブコマンド
+@@ -362,6 +381,39 @@ sparkle-design-cli generate --help
+ sparkle-design-cli check src --strict
+ ```
+ 
++### リリース手順（メンテナ向け）
++
++npm publish は GitHub Actions (`Publish to npm`) 経由で行います。ローカルから `npm publish` しないでください。
++
++#### 安定版（latest）
++
++1. `main` ブランチに変更をマージ
++2. `package.json` の `version` を SemVer で更新（例: `2.0.6` → `2.1.0`）し、`CHANGELOG.md` に該当セクションを追加
++3. PR をマージ後、Actions の **Publish to npm** を `channel: auto`（または `latest`）で手動実行
++4. workflow は lint / test を流したうえで `npm publish`（dist-tag = latest）を実行
++
++#### Beta（beta）
++
++品質保証中の変更を先行公開したいときに使います。latest には影響しません。
++
++1. `package.json` の `version` を `X.Y.Z-beta.N` 形式に更新（例: `2.1.0-beta.0`、次の beta は `2.1.0-beta.1`）
++2. `CHANGELOG.md` に `[X.Y.Z-beta.N]` セクションを追加
++3. PR をマージ後、Actions の **Publish to npm** を `channel: auto`（または `beta`）で手動実行
++4. workflow が version を判定して `npm publish --tag beta` を実行
++5. 利用者側は `npx --yes sparkle-design-cli@beta ...` で検証
++
++#### Beta から GA（latest）へ昇格
++
++同じ成果物を latest にする場合は、新しい安定版 `X.Y.Z` を publish するか、既存 beta バージョンに latest タグを付け替えます。
++
++```bash
++# 選択肢 A: 新たに X.Y.Z を publish する（推奨）
++#   version を X.Y.Z に更新 → workflow を latest で実行
++
++# 選択肢 B: 既存の X.Y.Z-beta.N に latest タグを付け替える
++npm dist-tag add sparkle-design-cli@X.Y.Z-beta.N latest
++```
++
+ ## ライセンス
+ 
+ MIT License - 詳細は [LICENSE](LICENSE) ファイルを参照してください。
+diff --git a/eslint.config.js b/eslint.config.js
+index ef4de25..6861911 100644
+--- a/eslint.config.js
++++ b/eslint.config.js
+@@ -12,7 +12,14 @@ export default [
+                         }
+                 },
+                 rules: {
+-                        'no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
++                        'no-unused-vars': [
++                                'error',
++                                {
++                                        argsIgnorePattern: '^_',
++                                        varsIgnorePattern: '^_',
++                                        destructuredArrayIgnorePattern: '^_'
++                                }
++                        ],
+                         'no-console': 'off',
+                         'prefer-const': 'error',
+                         'no-var': 'error',
+diff --git a/lib/font-manager.js b/lib/font-manager.js
+index 3f68f93..15da1fe 100644
+--- a/lib/font-manager.js
++++ b/lib/font-manager.js
+@@ -5,7 +5,7 @@
+ 
+ import fs from 'fs';
+ import path from 'path';
+-import { REGEX, COMMENTS, IMPORTS, MESSAGES, FONT_DEFAULTS } from './constants.js';
++import { REGEX, COMMENTS, IMPORTS, MESSAGES } from './constants.js';
+ 
+ /**
+  * sparkle-design.css からフォントの@import文を抽出する
+@@ -26,15 +26,6 @@ export function removeFontImportsFromCSS(cssContent) {
+   return cssContent.replace(REGEX.FONT_IMPORT_WITH_COMMENT, '');
+ }
+ 
+-/**
+- * フォントimportブロックを生成する
+- * @param {Array<string>} fontImports フォントimport文の配列
+- * @returns {string} フォントimportブロック
+- */
+-function createFontImportBlock(fontImports) {
+-  return [COMMENTS.FONT_IMPORT, ...fontImports, ''].join('\n');
+-}
+-
+ /**
+  * globals.css から node_modules への相対パスを計算する
+  * @param {string} globalsPath globals.css の絶対パス

@@ -1,0 +1,875 @@
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index abdb25b..6f93d09 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
+ 
+ ## [Unreleased]
+ 
++## [2.0.7-beta.2] - 2026-04-17
++
++### Added
++
++- **#31 `generate` / `setup` に `--strict` フラグを追加**: 既定は従来どおり「失敗しても warn + 継続」で後方互換を保ちつつ、CI などで確実にエラー検知したい場合は `--strict` を指定することで以下を exit 1 に昇格できるようになりました:
++  - `sparkle-design` などデザインシステムパッケージが `package.json` に入っているのに Tailwind エントリ CSS が見つからない
++  - エントリ CSS はあるが `@import "tailwindcss";` が書かれていない
++  - エントリ CSS への書き込みに失敗した
++    これで beta.1 で直した「Vite 環境で `@source` が silent に未挿入」級の回帰が CI に拾われるようになります。
++    なお現状 `setup --strict` は **generate ステージの失敗のみ** を検出対象にします（install / scaffold / guard 書き込みの失敗は従来どおり warn）。`--strict` と `--skip-generate` / `--dry-run` を併用すると strict チェック対象が無くなるので、併用時は警告を出すようにしています。
++- **内部 API**: `updateGlobalsWithFonts` / `manageFontImports` / `generateCSS` の戻り値に `{ status: 'skipped' | 'updated' | 'failed', reason? }` を追加。呼び出し側が「作業不要でスキップ」と「作業対象だったが失敗」を区別できるようになりました。
++
++### Changed
++
++- **#33 `TAILWIND_NOT_FOUND` 警告を actionable に**: 「どのファイルに何を書けばよいか」を表示するようにしました:
++  - 旧: `⚠️  globals.css に Tailwind import が見つかりません。`
++  - 新: `⚠️  /abs/path/to/src/index.css に Tailwind import が見つかりません。ファイル先頭に \`@import "tailwindcss";\` を追記してください。`
++- **`--globals-path` の typo で silent warn しない**: 明示的に指定された globals パスが見つからない場合は警告ではなく例外を投げるようにしました。設定ミスを発見しやすくなります (`--strict` 無しでも exit 1)。
++
+ ## [2.0.7-beta.1] - 2026-04-17
+ 
+ ### Fixed
+diff --git a/bin/sparkle-design.js b/bin/sparkle-design.js
+index 1025f2d..aa28b61 100755
+--- a/bin/sparkle-design.js
++++ b/bin/sparkle-design.js
+@@ -19,6 +19,7 @@ function parseGenerateOptions(args) {
+     configPath: null,
+     outputPath: null,
+     globalsPath: null,
++    strict: false,
+     help: false,
+   };
+ 
+@@ -36,6 +37,8 @@ function parseGenerateOptions(args) {
+     } else if (arg === '--globals-path') {
+       options.globalsPath = requireOptionValue(args, i, '--globals-path');
+       i += 1;
++    } else if (arg === '--strict') {
++      options.strict = true;
+     } else {
+       throw new Error(`Unknown option for generate: ${arg}`);
+     }
+@@ -86,6 +89,7 @@ function parseSetupOptions(args) {
+     skipInstall: false,
+     skipScaffold: false,
+     skipGenerate: false,
++    strict: false,
+     help: false,
+   };
+ 
+@@ -113,6 +117,8 @@ function parseSetupOptions(args) {
+       options.skipScaffold = true;
+     } else if (arg === '--skip-generate') {
+       options.skipGenerate = true;
++    } else if (arg === '--strict') {
++      options.strict = true;
+     } else {
+       throw new Error(`Unknown option for setup: ${arg}`);
+     }
+@@ -161,6 +167,8 @@ Generate options:
+   -c, --config <path>        設定ファイルのパス (default: ./sparkle.config.json)
+   -o, --output <path>        出力ファイルのパス (default: ./src/app/sparkle-design.css)
+   --globals-path <path>      Tailwind エントリポイント CSS のパス (default: 自動検出)
++  --strict                   globals.css への @source 注入等が失敗したら exit 1
++                             (CI 向け。既定は warn + 継続で後方互換を維持)
+ 
+ sparkle.config.json の設定フィールド:
+ 
+@@ -204,6 +212,7 @@ Setup options:
+   --skip-install             パッケージインストール（sparkle-design, tailwindcss）をスキップ
+   --skip-scaffold            初期ファイル（sparkle.config.json, postcss.config, エントリ CSS）生成をスキップ
+   --skip-generate            generate 実行をスキップ
++  --strict                   generate の失敗を exit 1 に昇格（CI 向け）
+ 
+ Setup の動作:
+   1. パッケージマネージャー検出（pnpm / npm / yarn / bun）
+@@ -257,7 +266,9 @@ function main() {
+         process.exit(0);
+       }
+ 
+-      generateCSS(options.configPath, options.outputPath, options.globalsPath);
++      generateCSS(options.configPath, options.outputPath, options.globalsPath, {
++        strict: options.strict,
++      });
+       return;
+     }
+ 
+diff --git a/lib/constants.js b/lib/constants.js
+index 3b4b2be..2a733cb 100644
+--- a/lib/constants.js
++++ b/lib/constants.js
+@@ -170,7 +170,11 @@ export const MESSAGES = {
+   FONT_REMOVE_SKIPPED: 'ℹ️  globals.css の更新に失敗したため、フォントimport削除をスキップします。',
+ 
+   // 警告メッセージ
+-  TAILWIND_NOT_FOUND: '⚠️  globals.css に Tailwind import が見つかりません。',
++  // 指定された globals.css に Tailwind import が無いと @source / sparkle-design.css
++  // の挿入ができないため、どのファイルに何を書けばよいかを示す actionable なメッセージにする。
++  // en: Make the warning actionable — tell the user which file to edit and what to add.
++  TAILWIND_NOT_FOUND: (path) =>
++    `⚠️  ${path} に Tailwind import が見つかりません。ファイル先頭に \`@import "tailwindcss";\` を追記してください。`,
+   GLOBALS_UPDATE_FAILED: (error) => `⚠️  globals.css の更新に失敗しました: ${error}`,
+   FONT_MANAGEMENT_ERROR: (error) => `⚠️  フォント管理処理でエラーが発生しました: ${error}`,
+   COLOR_CONVERSION_FAILED: (hex) => `⚠️ 色の変換に失敗しました: ${hex}`,
+diff --git a/lib/font-manager.js b/lib/font-manager.js
+index 1fe4e91..03e105a 100644
+--- a/lib/font-manager.js
++++ b/lib/font-manager.js
+@@ -190,18 +190,20 @@ function reconstructGlobalsCss(globalsContent, sparkleImportBlock, tailwindInfo)
+  * - sparkle-design.css importをTailwindの後に配置
+  * - 自動検出した sourcePackages から @source ディレクティブを挿入
+  *
+- * **v2.0.7-beta.1 以前の不具合**: 早期 return が `fontImports.length === 0` 単独で
+- * 行われていたため、フォントを SparkleHead に移行済みかつ既存 globals.css が
+- * ある（Vite の `src/index.css` など）プロジェクトでは `@source` が一切挿入
+- * されなかった。条件を「フォント・sourcePackages・customCssPath のすべてが
+- * 空なら skip」に変更し、パッケージの自動検出結果だけでも globals.css が
+- * patch されるようにした。
++ * **v2.0.7-beta.2**: 戻り値を真偽値から `{ status, reason }` の状態付きに変更。
++ * 呼び出し側が「作業不要でスキップ」「失敗したがデフォルトは warn 継続」を
++ * 区別できるようにし、`--strict` モードで失敗を exit code に反映できるよう
++ * にした（#31）。`skipped` は後方互換のため `false` に、`updated` は `true`
++ * に toBoolean で扱える想定。
+  *
+  * @param {Array<string>} fontImports フォントimport文の配列
+  * @param {string} globalsPath globals.cssのパス
+  * @param {Array<string>|null} sourcePackages 追加パッケージ名の配列（null の場合は @source を生成しない）
+  * @param {string|null} customCssPath custom-css ファイルの相対パス
+- * @returns {boolean} globals.css の更新に成功した場合は true
++ * @returns {{ status: 'skipped' | 'updated' | 'failed', reason?: string }}
++ *   skipped: 触る理由がない (fonts/sourcePackages/customCss すべて空)
++ *   updated: globals.css を正常に書き換えた
++ *   failed: 書き換え対象だったが失敗した (TAILWIND_IMPORT 欠落、write 失敗等)
+  */
+ export function updateGlobalsWithFonts(
+   fontImports,
+@@ -217,7 +219,7 @@ export function updateGlobalsWithFonts(
+   // 理由がないので skip。
+   // en: Nothing to inject, so leave globals.css alone.
+   if (!hasFonts && !hasSourcePackages && !hasCustomCss) {
+-    return false;
++    return { status: 'skipped', reason: 'no-work' };
+   }
+ 
+   try {
+@@ -230,8 +232,12 @@ export function updateGlobalsWithFonts(
+     // 3. Tailwind import の位置を見つける
+     const tailwindInfo = findTailwindImport(globalsContent);
+     if (!tailwindInfo) {
+-      console.warn(MESSAGES.TAILWIND_NOT_FOUND);
+-      return false;
++      // 表示はプロジェクト相対パスにする。絶対パスだと「どのファイルをいじるのか」
++      // が一目で分かりにくく、リポジトリ間で絶対パスが変わるので diff も読みにくい。
++      // en: Show the project-relative path so it's obvious which file to edit.
++      const displayPath = path.relative(process.cwd(), globalsPath) || globalsPath;
++      console.warn(MESSAGES.TAILWIND_NOT_FOUND(displayPath));
++      return { status: 'failed', reason: 'tailwind-import-missing' };
+     }
+ 
+     // 4. importブロックを生成（フォント @import は SparkleHead に移行したため生成しない）
+@@ -247,11 +253,10 @@ export function updateGlobalsWithFonts(
+     // 6. 更新したglobals.cssを書き込む
+     fs.writeFileSync(globalsPath, reconstructedContent, 'utf8');
+     console.log(MESSAGES.GLOBALS_UPDATED(globalsPath));
+-    return true;
++    return { status: 'updated' };
+   } catch (error) {
+     console.error(MESSAGES.GLOBALS_UPDATE_FAILED(error.message));
+-    // globals.cssの更新は必須ではないので、エラーでも処理を続行
+-    return false;
++    return { status: 'failed', reason: `write-error: ${error.code ?? error.message}` };
+   }
+ }
+ 
+@@ -355,8 +360,17 @@ function resolveGlobalsPath(sparkleDesignPath, explicitGlobalsPath = null) {
+     if (fs.existsSync(resolved)) {
+       return { path: resolved, source: 'explicit' };
+     }
+-    console.warn(`⚠️  指定された globals パスが見つかりません: ${explicitGlobalsPath}`);
+-    return null;
++    // 明示指定は settings bug / typo なので silent warn ではなく throw に
++    // 昇格させる。--strict の有無に関わらず呼び出し元で伝播させたいので、
++    // error.code を付けて上流で識別できるようにする。
++    // en: An explicit --globals-path value that doesn't exist is almost
++    // always a typo. We tag the error so manageFontImports's catch knows
++    // to re-throw regardless of strict mode.
++    const err = new Error(
++      `指定された globals パスが見つかりません: ${explicitGlobalsPath} (cwd 基準で解決: ${resolved})`
++    );
++    err.code = 'E_EXPLICIT_GLOBALS_PATH_NOT_FOUND';
++    throw err;
+   }
+ 
+   // 1. 自動検出: sparkle-design.css と同じディレクトリで @import "tailwindcss" を含む
+@@ -420,24 +434,54 @@ function resolveGlobalsPath(sparkleDesignPath, explicitGlobalsPath = null) {
+ /**
+  * フォント管理の自動処理を実行する
+  * sparkle-design.css からフォントimportを抽出し、Tailwind エントリポイント CSS に @source 等を挿入する
++ *
++ * **v2.0.7-beta.2**: 戻り値を `{ status, reason? }` に変更し、呼び出し側が
++ * 「作業不要のスキップ」「作業すべき状態だが失敗」を区別できるようにした
++ * (#31)。`options.strict` が true のとき、`status === 'failed'` になる状態は
++ * throw に昇格させて `bin/sparkle-design.js` の outer catch で exit 1 に
++ * 繋げる。
++ *
+  * @param {string} sparkleDesignPath sparkle-design.cssのパス
+  * @param {Array<string>|null} sourcePackages 追加パッケージ名の配列（null の場合は @source を生成しない）
+  * @param {string|null} customCssPath custom-css ファイルの相対パス
+  * @param {string|null} globalsPathOverride 明示的に指定された globals パス
++ * @param {{ strict?: boolean }} [options] strict=true のとき失敗を throw する
++ * @returns {{ status: 'skipped' | 'updated' | 'failed', reason?: string }}
+  */
+ export function manageFontImports(
+   sparkleDesignPath,
+   sourcePackages = null,
+   customCssPath = null,
+-  globalsPathOverride = null
++  globalsPathOverride = null,
++  options = {}
+ ) {
++  const strict = Boolean(options.strict);
++  const hasWork =
++    (sourcePackages !== null && sourcePackages !== undefined) || Boolean(customCssPath);
++
++  const raiseOrReturn = (result) => {
++    if (strict && result.status === 'failed') {
++      throw new Error(
++        `globals.css の更新に失敗しました (${result.reason ?? 'unknown'})。--strict モードでは exit 1 で終了します。`
++      );
++    }
++    return result;
++  };
++
+   try {
+     // 1. globals パスを解決
+     const resolved = resolveGlobalsPath(sparkleDesignPath, globalsPathOverride);
+ 
+     if (!resolved) {
++      // 作業すべき状態（sourcePackages 等あり）で entry CSS が見つからないのは
++      // 事実上の不具合。strict なら throw、非 strict なら従来どおり情報ログ。
++      // en: With work queued, missing entry CSS is effectively a misconfiguration.
++      if (hasWork) {
++        console.warn(MESSAGES.GLOBALS_NOT_FOUND);
++        return raiseOrReturn({ status: 'failed', reason: 'entry-css-not-found' });
++      }
+       console.log(MESSAGES.GLOBALS_NOT_FOUND);
+-      return;
++      return { status: 'skipped', reason: 'entry-css-not-found-no-work' };
+     }
+ 
+     const globalsPath = resolved.path;
+@@ -460,17 +504,13 @@ export function manageFontImports(
+     }
+ 
+     // 4. globals.css に import / @source を追加
+-    const globalsUpdated = updateGlobalsWithFonts(
+-      fontImports,
+-      globalsPath,
+-      sourcePackages,
+-      customCssPath
+-    );
++    const result = updateGlobalsWithFonts(fontImports, globalsPath, sourcePackages, customCssPath);
+ 
+-    if (!globalsUpdated) {
+-      // fonts が元々無く sourcePackages / customCss も空なら更新不要。
+-      // en: Nothing to do — not an error.
+-      return;
++    if (result.status === 'skipped') {
++      return result;
++    }
++    if (result.status === 'failed') {
++      return raiseOrReturn(result);
+     }
+ 
+     // 5. fonts が sparkle-design.css 側に残っていれば削除（globals 側に移動済みの前提）
+@@ -480,8 +520,15 @@ export function manageFontImports(
+       fs.writeFileSync(sparkleDesignPath, cleanedSparkleContent, 'utf8');
+       console.log(MESSAGES.FONT_REMOVED);
+     }
++    return result;
+   } catch (error) {
+     console.error(MESSAGES.FONT_MANAGEMENT_ERROR(error.message));
+-    // フォント管理は必須ではないので、エラーでも処理を続行
++    // strict モード、または明示指定された globals path の not-found は
++    // ユーザーが必ず気付くべきなので非 strict でも再 throw する。
++    // en: Always re-throw explicit --globals-path typos; respect strict for the rest.
++    if (strict || error.code === 'E_EXPLICIT_GLOBALS_PATH_NOT_FOUND') {
++      throw error;
++    }
++    return { status: 'failed', reason: `manage-error: ${error.code ?? error.message}` };
+   }
+ }
+diff --git a/lib/generate-css.js b/lib/generate-css.js
+index 33c6fa2..b45ab8b 100644
+--- a/lib/generate-css.js
++++ b/lib/generate-css.js
+@@ -68,7 +68,7 @@ function dedupeFontImports(cssContent) {
+ 
+   return cssContent
+     .split('\n')
+-    .filter(line => {
++    .filter((line) => {
+       if (!line.includes('fonts.googleapis.com')) {
+         return true;
+       }
+@@ -96,7 +96,7 @@ function normalizeFontsEntry(entry) {
+     return [{ family: entry, weights: FONT_DEFAULTS.WEIGHTS }];
+   }
+   if (Array.isArray(entry)) {
+-    return entry.map(item => {
++    return entry.map((item) => {
+       if (typeof item === 'string') {
+         return { family: item, weights: FONT_DEFAULTS.WEIGHTS };
+       }
+@@ -132,7 +132,7 @@ function resolveFontConfig(config) {
+  * @returns {string} CSS font-family 値（例: 'Montserrat', 'Noto Sans JP', sans-serif）
+  */
+ function generateFontFamilyValue(fonts, genericFamily) {
+-  const quoted = fonts.map(f => `'${f.family}'`);
++  const quoted = fonts.map((f) => `'${f.family}'`);
+   return [...quoted, genericFamily].join(', ');
+ }
+ 
+@@ -169,9 +169,10 @@ function generateMergedFontImports(allFonts) {
+  * @returns {string} フォント import ブロック
+  */
+ function generateFontImportsBlock(configOrResolved) {
+-  const { pro, mono } = configOrResolved.pro && configOrResolved.mono
+-    ? configOrResolved
+-    : resolveFontConfig(configOrResolved);
++  const { pro, mono } =
++    configOrResolved.pro && configOrResolved.mono
++      ? configOrResolved
++      : resolveFontConfig(configOrResolved);
+ 
+   const imports = [
+     FONT_DEFAULTS.MATERIAL_SYMBOLS_IMPORT,
+@@ -206,7 +207,7 @@ function generateSparkleHeadContent(resolvedFonts) {
+     `      <link rel="preconnect" href="${FONT_DOMAINS.GOOGLEAPIS}" />`,
+     `      <link rel="preconnect" href="${FONT_DOMAINS.GSTATIC}" crossOrigin="anonymous" />`,
+     `      <link rel="stylesheet" href="${materialSymbolsUrl}" />`,
+-    ...fontUrls.map(url => `      <link rel="stylesheet" href="${url}" />`),
++    ...fontUrls.map((url) => `      <link rel="stylesheet" href="${url}" />`),
+   ];
+ 
+   return `/**
+@@ -289,7 +290,15 @@ function processTemplate(template, config, grayMapping, radiusMapping, colors) {
+   // 5. 基本的な設定値による置換（オブジェクト・配列・拡張フィールドはスキップ）
+   Object.entries(config).forEach(([key, value]) => {
+     // 配列・オブジェクト・拡張フィールドはスキップ
+-    if (Array.isArray(value) || (typeof value === 'object' && value !== null) || key === 'custom-css' || key === 'fonts' || key === 'extend' || key === 'source-packages' || key === 'globals-path') {
++    if (
++      Array.isArray(value) ||
++      (typeof value === 'object' && value !== null) ||
++      key === 'custom-css' ||
++      key === 'fonts' ||
++      key === 'extend' ||
++      key === 'source-packages' ||
++      key === 'globals-path'
++    ) {
+       return;
+     }
+     // 通常のプレースホルダー（CSS用 - スペースはそのまま）
+@@ -336,9 +345,7 @@ function processTemplate(template, config, grayMapping, radiusMapping, colors) {
+ // `sparkle-design` は CLI 側のデフォルトパッケージなのでリストには加えず「存在判定」にだけ使う。
+ // en: Known design-system packages to auto-detect. `sparkle-design` is the CLI's
+ //     default source package, so it only acts as an "enables @source" signal.
+-const KNOWN_DESIGN_SYSTEM_PACKAGES = [
+-  '@goodpatch/sparkle-design-internal',
+-];
++const KNOWN_DESIGN_SYSTEM_PACKAGES = ['@goodpatch/sparkle-design-internal'];
+ 
+ /**
+  * package.json の dependencies / devDependencies から既知のデザインシステムパッケージを検出する。
+@@ -394,8 +401,17 @@ function writeCSS(cssContent, outputPath = null) {
+  * メイン処理
+  * @param {string|null} configPath カスタム設定ファイルのパス（オプション）
+  * @param {string|null} outputPath カスタム出力パス（オプション）
++ * @param {string|null} globalsPath 明示指定の globals.css パス（オプション）
++ * @param {{ strict?: boolean }} [options] strict=true のとき、
++ *   globals.css パッチ失敗などを throw に昇格させる（exit 1 に繋げるため）
++ * @returns {{ globalsResult: { status: 'skipped'|'updated'|'failed', reason?: string } }}
+  */
+-export function generateCSS(configPath = null, outputPath = null, globalsPath = null) {
++export function generateCSS(
++  configPath = null,
++  outputPath = null,
++  globalsPath = null,
++  options = {}
++) {
+   console.log(MESSAGES.START);
+ 
+   // 1. 設定ファイルを読み込み
+@@ -413,7 +429,13 @@ export function generateCSS(configPath = null, outputPath = null, globalsPath =
+   const radiusMapping = loadRadiusMapping();
+ 
+   // 5. テンプレートを設定値で処理（resolvedFonts も返す）
+-  const { css: processedCSS, resolvedFonts } = processTemplate(template, config, grayMapping, radiusMapping, colors);
++  const { css: processedCSS, resolvedFonts } = processTemplate(
++    template,
++    config,
++    grayMapping,
++    radiusMapping,
++    colors
++  );
+ 
+   // 6. CSSファイルを書き出し
+   const defaultOutputPath = path.resolve(
+@@ -437,16 +459,23 @@ export function generateCSS(configPath = null, outputPath = null, globalsPath =
+   //     with explicit config entries. If neither surfaces anything, @source is skipped.
+   console.log(MESSAGES.FONT_MANAGEMENT_START);
+   const detectedPackages = detectSourcePackagesFromPackageJson();
+-  const explicitPackages = 'source-packages' in config ? (config['source-packages'] || []) : null;
++  const explicitPackages = 'source-packages' in config ? config['source-packages'] || [] : null;
+   const sourcePackages =
+     detectedPackages !== null || explicitPackages !== null
+       ? [...new Set([...(detectedPackages ?? []), ...(explicitPackages ?? [])])]
+       : null;
+   const customCssPath = config['custom-css'] || null;
+   const globalsPathOverride = globalsPath || config['globals-path'] || null;
+-  manageFontImports(resolvedOutputPath, sourcePackages, customCssPath, globalsPathOverride);
++  const globalsResult = manageFontImports(
++    resolvedOutputPath,
++    sourcePackages,
++    customCssPath,
++    globalsPathOverride,
++    { strict: Boolean(options.strict) }
++  );
+ 
+   console.log(MESSAGES.SUCCESS);
++  return { globalsResult };
+ }
+ 
+ // スクリプトが直接実行された場合のみメイン処理を実行
+diff --git a/lib/setup.js b/lib/setup.js
+index 8ad53a0..6744a19 100644
+--- a/lib/setup.js
++++ b/lib/setup.js
+@@ -456,13 +456,31 @@ function runAssistantGuard(cwd, packageJsonPath, options, assistantConfig) {
+   };
+ }
+ 
+-function runGenerate({ skipGenerate, dryRun }) {
++function runGenerate({ skipGenerate, dryRun, strict }) {
++  // --skip-generate / --dry-run と --strict が同時指定された場合、strict チェックを
++  // 走らせる対象 (generate) そのものがスキップされるため strict は事実上無意味。
++  // サイレントに無効化するとユーザーが CI で気付けないので警告を出す。
++  // en: --strict has no effect if generate is skipped — warn the user rather
++  // than silently no-op, which would mask CI misconfiguration.
++  if (strict && (skipGenerate || dryRun)) {
++    console.warn(
++      '⚠️  --strict は generate の失敗のみ検出します。--skip-generate / --dry-run と併用した場合は strict チェックは走りません。'
++    );
++  }
+   if (skipGenerate || dryRun) return { skipped: true, ran: false };
+   try {
+     console.log('🎨 sparkle-design.css を生成中...');
+-    generateCSS();
+-    return { skipped: false, ran: true };
++    const result = generateCSS(null, null, null, { strict: Boolean(strict) });
++    return { skipped: false, ran: true, globalsResult: result?.globalsResult };
+   } catch (error) {
++    // strict モード、または sparkle.config.json の `globals-path` typo などの
++    // 明示指定 not-found は、非 strict でもユーザーが必ず気付くべきなので
++    // 再 throw する（#33 の挙動を setup 経由でも保つ）。
++    // en: Always re-throw explicit --globals-path typos so `setup` surfaces
++    // them via exit code, matching the behaviour of `generate` directly.
++    if (strict || error.code === 'E_EXPLICIT_GLOBALS_PATH_NOT_FOUND') {
++      throw error;
++    }
+     console.warn(`⚠️  generate 実行をスキップしました: ${error.message}`);
+     return { skipped: false, ran: false, error: error.message };
+   }
+@@ -493,7 +511,11 @@ export function setupAssistant(options = {}) {
+     { ...options, assistant, dryRun },
+     assistantConfig
+   );
+-  const generate = runGenerate({ skipGenerate: Boolean(options.skipGenerate), dryRun });
++  const generate = runGenerate({
++    skipGenerate: Boolean(options.skipGenerate),
++    dryRun,
++    strict: Boolean(options.strict),
++  });
+ 
+   const summary = {
+     assistant,
+diff --git a/package-lock.json b/package-lock.json
+index 0f3e3b6..8102384 100644
+--- a/package-lock.json
++++ b/package-lock.json
+@@ -1,12 +1,12 @@
+ {
+   "name": "sparkle-design-cli",
+-  "version": "2.0.7-beta.1",
++  "version": "2.0.7-beta.2",
+   "lockfileVersion": 3,
+   "requires": true,
+   "packages": {
+     "": {
+       "name": "sparkle-design-cli",
+-      "version": "2.0.7-beta.1",
++      "version": "2.0.7-beta.2",
+       "license": "MIT",
+       "dependencies": {
+         "culori": "^4.0.2"
+diff --git a/package.json b/package.json
+index 1a359cd..052c400 100644
+--- a/package.json
++++ b/package.json
+@@ -1,6 +1,6 @@
+ {
+   "name": "sparkle-design-cli",
+-  "version": "2.0.7-beta.1",
++  "version": "2.0.7-beta.2",
+   "description": "Sparkle Design CSS Generator - デザインシステムCSSを設定ファイルから生成するツール",
+   "publishConfig": {
+     "registry": "https://registry.npmjs.org",
+diff --git a/test/setup.test.js b/test/setup.test.js
+index 223604b..995ebd9 100644
+--- a/test/setup.test.js
++++ b/test/setup.test.js
+@@ -1466,3 +1466,344 @@ test('setup scaffold is idempotent — second run does not modify existing files
+     removeTempDir(tempDir);
+   }
+ });
++
++// --- #31 --strict モードのテスト ---
++// en: Tests for the --strict flag (#31 silent-failure elimination)
++
++test('generate --strict exits non-0 when sparkle-design is installed but no entry CSS exists', () => {
++  // package.json には sparkle-design が入っているのに entry CSS が一つも無い
++  // (Tailwind 未セットアップ) 場合、従来は warn + exit 0 だったが --strict で
++  // exit 1 になることを検証。
++  // en: Strict mode must surface the "package installed but no entry CSS"
++  // misconfiguration as a non-0 exit.
++  const tempDir = createTempDir();
++
++  try {
++    fs.writeFileSync(
++      path.join(tempDir, 'package.json'),
++      JSON.stringify(
++        { name: 'no-entry-css', dependencies: { 'sparkle-design': '^1.0.0' } },
++        null,
++        2
++      ),
++      'utf8'
++    );
++    fs.mkdirSync(path.join(tempDir, 'src', 'app'), { recursive: true });
++    fs.mkdirSync(path.join(tempDir, 'node_modules'), { recursive: true });
++    // entry CSS (globals.css / index.css) は一切作らない。sparkle.config.json だけ置く。
++    // en: No globals.css / index.css anywhere. Only the sparkle config.
++    fs.writeFileSync(
++      path.join(tempDir, 'sparkle.config.json'),
++      JSON.stringify({ primary: 'blue', 'font-pro': 'Inter', 'font-mono': 'Inter', radius: 'md' }),
++      'utf8'
++    );
++
++    const defaultResult = spawnSync(process.execPath, [CLI_PATH, 'generate'], {
++      cwd: tempDir,
++      encoding: 'utf8',
++    });
++    powerAssert(defaultResult.status === 0, 'default generate should stay warn-only (exit 0)');
++
++    const strictResult = spawnSync(process.execPath, [CLI_PATH, 'generate', '--strict'], {
++      cwd: tempDir,
++      encoding: 'utf8',
++    });
++    powerAssert(
++      strictResult.status !== 0,
++      `generate --strict should exit non-0 when entry CSS is missing (got ${strictResult.status})`
++    );
++  } finally {
++    removeTempDir(tempDir);
++  }
++});
++
++test('generate --strict exits non-0 when entry CSS exists but lacks Tailwind import', () => {
++  // globals.css はあるが `@import "tailwindcss";` が書かれていないケース。
++  // 従来は warn して何もせず exit 0、--strict では exit 1 に。
++  // en: Strict mode must catch "Tailwind wasn't wired up" as non-0.
++  const tempDir = createTempDir();
++
++  try {
++    fs.writeFileSync(
++      path.join(tempDir, 'package.json'),
++      JSON.stringify(
++        { name: 'no-tailwind', dependencies: { 'sparkle-design': '^1.0.0' } },
++        null,
++        2
++      ),
++      'utf8'
++    );
++    fs.mkdirSync(path.join(tempDir, 'src', 'app'), { recursive: true });
++    fs.mkdirSync(path.join(tempDir, 'node_modules'), { recursive: true });
++    // Tailwind import を含まない globals.css を用意
++    // en: globals.css without any Tailwind import.
++    fs.writeFileSync(
++      path.join(tempDir, 'src', 'app', 'globals.css'),
++      '/* just a placeholder, no tailwindcss import */\n',
++      'utf8'
++    );
++    fs.writeFileSync(
++      path.join(tempDir, 'sparkle.config.json'),
++      JSON.stringify({ primary: 'blue', 'font-pro': 'Inter', 'font-mono': 'Inter', radius: 'md' }),
++      'utf8'
++    );
++
++    const defaultResult = spawnSync(process.execPath, [CLI_PATH, 'generate'], {
++      cwd: tempDir,
++      encoding: 'utf8',
++    });
++    powerAssert(defaultResult.status === 0, 'default generate stays exit 0');
++
++    const strictResult = spawnSync(process.execPath, [CLI_PATH, 'generate', '--strict'], {
++      cwd: tempDir,
++      encoding: 'utf8',
++    });
++    powerAssert(
++      strictResult.status !== 0,
++      `generate --strict should exit non-0 when Tailwind import is missing (got ${strictResult.status})`
++    );
++    // actionable なエラーメッセージ（ファイルパスと修正方法）が出ていること
++    // en: Error message must tell the user which file to edit and what to add.
++    const combined = `${strictResult.stdout}\n${strictResult.stderr}`;
++    powerAssert(
++      combined.includes('@import "tailwindcss";'),
++      'actionable message should tell the user to add `@import "tailwindcss";`'
++    );
++  } finally {
++    removeTempDir(tempDir);
++  }
++});
++
++test('generate --strict exits 0 when everything succeeds', () => {
++  const tempDir = createTempDir();
++
++  try {
++    fs.writeFileSync(
++      path.join(tempDir, 'package.json'),
++      JSON.stringify({ name: 'happy', dependencies: { 'sparkle-design': '^1.0.0' } }, null, 2),
++      'utf8'
++    );
++    fs.mkdirSync(path.join(tempDir, 'src', 'app'), { recursive: true });
++    fs.mkdirSync(path.join(tempDir, 'node_modules'), { recursive: true });
++    fs.writeFileSync(
++      path.join(tempDir, 'src', 'app', 'globals.css'),
++      '@import "tailwindcss";\n',
++      'utf8'
++    );
++    fs.writeFileSync(
++      path.join(tempDir, 'sparkle.config.json'),
++      JSON.stringify({ primary: 'blue', 'font-pro': 'Inter', 'font-mono': 'Inter', radius: 'md' }),
++      'utf8'
++    );
++
++    const result = spawnSync(process.execPath, [CLI_PATH, 'generate', '--strict'], {
++      cwd: tempDir,
++      encoding: 'utf8',
++    });
++    powerAssert(
++      result.status === 0,
++      `generate --strict should succeed here (got ${result.status})`
++    );
++  } finally {
++    removeTempDir(tempDir);
++  }
++});
++
++test('generate --strict exits 0 when there is no design-system package to patch for', () => {
++  // sparkle-design が未インストール (作業不要) なら --strict でも exit 0。
++  // 「work queue が空 → skip は正常系」を担保する。
++  // en: No design-system package → nothing to patch → strict should still pass.
++  const tempDir = createTempDir();
++
++  try {
++    fs.writeFileSync(
++      path.join(tempDir, 'package.json'),
++      JSON.stringify({ name: 'no-ds' }, null, 2),
++      'utf8'
++    );
++    fs.mkdirSync(path.join(tempDir, 'src', 'app'), { recursive: true });
++    fs.writeFileSync(
++      path.join(tempDir, 'sparkle.config.json'),
++      JSON.stringify({ primary: 'blue', 'font-pro': 'Inter', 'font-mono': 'Inter', radius: 'md' }),
++      'utf8'
++    );
++
++    const result = spawnSync(process.execPath, [CLI_PATH, 'generate', '--strict'], {
++      cwd: tempDir,
++      encoding: 'utf8',
++    });
++    powerAssert(
++      result.status === 0,
++      `generate --strict with no design-system package should still exit 0 (got ${result.status})`
++    );
++  } finally {
++    removeTempDir(tempDir);
++  }
++});
++
++test('setup --strict propagates generate failure to exit code', () => {
++  // setup 経由の runGenerate が strict を受け、generate 内の失敗を例外として
++  // 伝播させて outer catch で exit 1 になることを統合的に検証。
++  // en: Verify end-to-end that `setup --strict` turns a generate-stage failure
++  // (here: Tailwind import missing) into a non-0 exit.
++  const tempDir = createTempDir();
++
++  try {
++    fs.writeFileSync(
++      path.join(tempDir, 'package.json'),
++      JSON.stringify(
++        { name: 'setup-strict', dependencies: { 'sparkle-design': '^1.0.0' } },
++        null,
++        2
++      ),
++      'utf8'
++    );
++    fs.mkdirSync(path.join(tempDir, 'src', 'app'), { recursive: true });
++    fs.mkdirSync(path.join(tempDir, 'node_modules'), { recursive: true });
++    // Tailwind import を含まない globals.css を既存ファイルとして置く
++    // en: Pre-existing globals.css without `@import "tailwindcss";`.
++    fs.writeFileSync(
++      path.join(tempDir, 'src', 'app', 'globals.css'),
++      '/* missing tailwindcss */\n',
++      'utf8'
++    );
++
++    const result = spawnSync(
++      process.execPath,
++      [CLI_PATH, 'setup', '--skip-install', '--skip-scaffold', '--assistant', 'claude', '--strict'],
++      { cwd: tempDir, encoding: 'utf8' }
++    );
++    powerAssert(
++      result.status !== 0,
++      `setup --strict should surface generate failures as non-0 (got ${result.status})`
++    );
++  } finally {
++    removeTempDir(tempDir);
++  }
++});
++
++test('setup warns when --strict is combined with --skip-generate (strict has no effect)', () => {
++  // --strict と --skip-generate を併用すると strict チェック対象が消えるため
++  // サイレントに無効化せず警告する。CI 設定ミスを気付かせる。
++  // en: Combining --strict with --skip-generate silently disables the check —
++  // emit a warning so CI misconfiguration surfaces.
++  const tempDir = createTempDir();
++
++  try {
++    createPackageJson(tempDir);
++    fs.mkdirSync(path.join(tempDir, 'src'), { recursive: true });
++
++    const result = spawnSync(
++      process.execPath,
++      [
++        CLI_PATH,
++        'setup',
++        '--skip-install',
++        '--skip-scaffold',
++        '--skip-generate',
++        '--strict',
++        '--assistant',
++        'claude',
++      ],
++      { cwd: tempDir, encoding: 'utf8' }
++    );
++    powerAssert(result.status === 0, 'setup with --skip-generate should still succeed');
++    powerAssert(
++      result.stderr.includes('--strict は generate の失敗のみ検出します'),
++      'a warning must explain that --strict is a no-op when generate is skipped'
++    );
++  } finally {
++    removeTempDir(tempDir);
++  }
++});
++
++test('setup exits non-0 when sparkle.config.json has an invalid extend.globals-path (even without --strict)', () => {
++  // setup 経由でも `sparkle.config.json` の `globals-path` typo は silent に
++  // ならないことを保証する (codex-connector P2 指摘)。runGenerate が
++  // E_EXPLICIT_GLOBALS_PATH_NOT_FOUND を非 strict でも再 throw する。
++  // en: Explicit globals-path typos coming from sparkle.config.json must
++  // propagate to exit 1 through `setup`, not just `generate`.
++  const tempDir = createTempDir();
++
++  try {
++    fs.writeFileSync(
++      path.join(tempDir, 'package.json'),
++      JSON.stringify(
++        { name: 'setup-bad-path', dependencies: { 'sparkle-design': '^1.0.0' } },
++        null,
++        2
++      ),
++      'utf8'
++    );
++    fs.mkdirSync(path.join(tempDir, 'src', 'app'), { recursive: true });
++    fs.mkdirSync(path.join(tempDir, 'node_modules'), { recursive: true });
++    fs.writeFileSync(
++      path.join(tempDir, 'src', 'app', 'globals.css'),
++      '@import "tailwindcss";\n',
++      'utf8'
++    );
++    // globals-path に typo のある config
++    // en: Config with a typo'd extend.globals-path.
++    fs.writeFileSync(
++      path.join(tempDir, 'sparkle.config.json'),
++      JSON.stringify({
++        primary: 'blue',
++        'font-pro': 'Inter',
++        'font-mono': 'Inter',
++        radius: 'md',
++        extend: { 'globals-path': 'src/does-not-exist/typo.css' },
++      }),
++      'utf8'
++    );
++
++    const result = spawnSync(
++      process.execPath,
++      [CLI_PATH, 'setup', '--skip-install', '--skip-scaffold', '--assistant', 'claude'],
++      { cwd: tempDir, encoding: 'utf8' }
++    );
++    powerAssert(
++      result.status !== 0,
++      `setup must fail loudly on explicit globals-path typo (got ${result.status})`
++    );
++  } finally {
++    removeTempDir(tempDir);
++  }
++});
++
++test('generate with explicit --globals-path to a missing file exits non-0 (even without --strict)', () => {
++  // 明示指定された path が typo なのは設定ミス。--strict 無しでも throw で
++  // exit 1 に繋げる (#33 M-3)。
++  // en: Explicit --globals-path pointing to nothing is a typo — always fail.
++  const tempDir = createTempDir();
++
++  try {
++    fs.writeFileSync(
++      path.join(tempDir, 'package.json'),
++      JSON.stringify({ name: 'explicit-typo', dependencies: { 'sparkle-design': '^1.0.0' } }),
++      'utf8'
++    );
++    fs.mkdirSync(path.join(tempDir, 'src', 'app'), { recursive: true });
++    fs.writeFileSync(
++      path.join(tempDir, 'sparkle.config.json'),
++      JSON.stringify({ primary: 'blue', 'font-pro': 'Inter', 'font-mono': 'Inter', radius: 'md' }),
++      'utf8'
++    );
++
++    const result = spawnSync(
++      process.execPath,
++      [CLI_PATH, 'generate', '--globals-path', 'nonexistent/typo.css'],
++      { cwd: tempDir, encoding: 'utf8' }
++    );
++    powerAssert(
++      result.status !== 0,
++      `explicit --globals-path typo should fail loudly (got ${result.status})`
++    );
++    powerAssert(
++      result.stderr.includes('nonexistent/typo.css') ||
++        result.stdout.includes('nonexistent/typo.css'),
++      'error message must mention the bad path'
++    );
++  } finally {
++    removeTempDir(tempDir);
++  }
++});

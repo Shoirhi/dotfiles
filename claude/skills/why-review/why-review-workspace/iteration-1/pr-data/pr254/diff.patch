@@ -1,0 +1,283 @@
+diff --git a/.claude/skills/change-sparkle-config/SKILL.md b/.claude/skills/change-sparkle-config/SKILL.md
+new file mode 100644
+index 0000000..ac551ff
+--- /dev/null
++++ b/.claude/skills/change-sparkle-config/SKILL.md
+@@ -0,0 +1,130 @@
++---
++name: change-sparkle-config
++description: >
++  **導入済みの sparkle-design プロジェクト**で、ユーザーが目指したい「雰囲気」や「トーン」を
++  自然言語で伝えたら、`sparkle.config.json` の primary / font-pro / font-mono / radius を
++  書き換えて `sparkle-design-cli generate` まで実行するスキル。選択肢は Sparkle Design
++  Theme Settings Figma プラグインが扱える範囲（primary 7 色 / radius 6 段階 / fonts 11 種）
++  に揃えているので、Figma 側と CLI 側の見た目がずれません。**未導入プロジェクトの初期
++  セットアップは `setup-sparkle-design` の役割なのでそちらを使うこと。**
++  「雰囲気を変えたい」「もっとポップに」「ビジネスライクに」「高級感を出したい」
++  「やさしい印象」「ミニマルに」「primary カラーを変えたい」「角丸をもっと丸く」
++  「フォントを変えたい」「テーマを提案して」「sparkle.config.json を書き換えて」
++  などで発動する。English: "change the vibe", "make it more playful",
++  "make it more business-like", "adjust the theme", "change primary color",
++  "change fonts", "update sparkle.config.json".
++---
++
++# Skill: change-sparkle-config
++
++プロジェクトの `sparkle.config.json` を「言葉で伝えた雰囲気」から書き換え、`sparkle-design-cli generate` まで走らせて見た目を一発で更新するスキル。
++
++**前提**:
++
++- プロジェクトに既に `sparkle-design` / `sparkle-design-cli` が導入済み（未導入の場合は `setup-sparkle-design` スキルを先に使うよう案内する）
++- 書き換え可能な項目は **Sparkle Design Theme Settings Figma プラグインが扱える範囲と同一**（後述の reference 参照）
++
++---
++
++<!-- ========== AI アシスタント向け指示 ========== -->
++
++## AI アシスタントへの指示
++
++### 実行方針
++
++1. **前提チェック**
++   - カレントディレクトリに `sparkle.config.json` があるか確認。無ければ setup が終わっていない合図なので `setup-sparkle-design` スキルの利用を案内して中断。
++   - `package.json` の `dependencies` / `devDependencies` に `sparkle-design` が含まれるか確認（pnpm workspace 等で hoist されているケースに備え、`node_modules` のパスチェックは避ける）。未導入なら setup を案内して中断。
++2. **現在値を読み取り**
++   - `sparkle.config.json` を **`JSON.parse` で読み**、現在の `primary` / `font-pro` / `font-mono` / `radius` / `extend.*` とそれ以外のユーザー独自キーを把握。
++   - ファイル末尾の改行・インデント幅（スペース 2 / 4 / タブ）も記録しておき、書き込み時に元の体裁を維持する。
++   - JSONC（コメント付き）の場合はコメントを壊す可能性があるため、**中断してユーザーにマニュアル更新を促す**（勝手に剥がさない）。
++3. **ユーザー要望の解釈**
++   - 要望が曖昧なら **1 回だけ短く質問**。多段階問い合わせは禁止。質問例:「ポップ寄りと高級感寄りならどちらが近いですか？」
++   - 要望を [references/vibe-mapping.md](references/vibe-mapping.md) の方針で解釈し、**下記「許可リスト」内の値だけ** で構成された案を作る。
++4. **提案の提示（主案 1 本のみ）**
++   - 現在値 → 提案値を 1 本の表で提示。`primary` / `font-pro` / `font-mono` / `radius` の 4 行のみ。
++   - 理由を 1 行ずつ添える（「ポップさを出すため radius: md → xl」など）。
++   - **主案は常に 1 本のみ。並列候補を並べない。** 必要に応じて「別案も出せます」と打診だけする（ユーザーから要求があったときだけ出す）。
++5. **ユーザー確認**
++   - 「この内容で書き換えて generate しますか？」と **1 回だけ** 尋ねる。OK なら 6 へ、調整要望なら 3 に戻る。
++6. **書き込み前バリデーション（絶対実行）**
++   - 提案する 4 値の各々について、**書き込み直前に** SKILL.md の「許可リスト」と照合する。
++     - primary が許可リスト外 → 書き込み中断、別案を考え直す
++     - font-pro / font-mono が許可リスト外、または pro/mono 可否に反する用途 → 書き込み中断
++     - radius が許可リスト外 → 書き込み中断
++   - このチェックをスキップしない。ステップ 3 のマッピングが保証にはならない。
++7. **sparkle.config.json を書き換え（最小差分）**
++   - 手順: 現在値を `JSON.parse` → `primary` / `font-pro` / `font-mono` / `radius` の **4 キーだけ** を上書き → 元のインデント幅で `JSON.stringify`。
++   - `extend.*` は全てそのまま保持。知らないトップレベルキーも保持。ユーザー独自の記述は何ひとつ削らない・並べ替えない。
++8. **generate 実行と検証**
++   - `npx --yes sparkle-design-cli generate` を実行。
++   - exit code が 0 であること、`src/app/sparkle-design.css` と `src/app/SparkleHead.tsx`（または config で指定した出力先）が更新された mtime を持つことを確認。
++   - 失敗した場合は書き換え前の `sparkle.config.json` に戻すか、エラー全文をユーザーに共有して手動対応を促す。
++9. **完了報告**
++   - 更新した 4 項目を箇条書きで表示。
++   - SparkleHead がルートレイアウトに設置されていることを**プロジェクト内検索で一度確認**し、未設置が疑われるときだけ「`<SparkleHead />` を `<head>` に配置してください」と添える（毎回出すのは冗長）。
++
++### 許可リスト（書き換え可能な値）
++
++**絶対にここに無い値を書き込まないこと。** 外れた値を書いてしまうと Figma 側の theme-settings プラグインと CLI 側でずれて、`sparkle-design.css` の生成が崩れる可能性がある。
++
++#### primary（7 色）
++
++`blue` / `red` / `orange` / `green` / `purple` / `pink` / `yellow`
++
++#### radius（6 段階）
++
++`none` / `sm` / `md` / `lg` / `xl` / `full`
++
++#### font-pro / font-mono（11 種、用途制限あり）
++
++| フォント名 | pro 可 | mono 可 | 傾向 |
++|---|---|---|---|
++| `BIZ UDPGothic` | ✅ | ❌ | 日本語標準・可読性 |
++| `BIZ UDGothic` | ❌ | ✅ | 日本語 mono / 等幅 |
++| `Noto Sans JP` | ✅ | ✅ | 日本語定番 |
++| `IBM Plex Sans JP` | ✅ | ✅ | やや硬め・クリーン |
++| `Inter` | ✅ | ✅ | 英字モダン・中立 |
++| `Roboto` | ✅ | ❌ | 英字 Google 標準 |
++| `Roboto Mono` | ❌ | ✅ | 英字 mono |
++| `Lato` | ✅ | ✅ | 英字やわらかめ |
++| `Open Sans` | ✅ | ✅ | 英字ニュートラル |
++| `Montserrat` | ✅ | ✅ | 英字モダン・やや強め |
++| `Hiragino Sans` | ✅ | ✅ | 日本語 Apple 系 |
++
++> `pro` 欄が ❌ のフォントを `font-pro` に、`mono` 欄が ❌ のフォントを `font-mono` に書かないこと。
++
++### 雰囲気 → 値のマッピング（スピード判定用）
++
++以下はよく出る要望の即答向け。ここに無い / 複数の雰囲気に跨る要望は **必ず [references/vibe-mapping.md](references/vibe-mapping.md) を読み**（8 パターン + 選定理由を含む）、最も近いものに寄せてから提案する。
++
++| 雰囲気 | primary | radius | font-pro | font-mono |
++|---|---|---|---|---|
++| ポップ / 元気 | yellow / pink / orange | xl | Montserrat | Roboto Mono |
++| ビジネスライク | blue | sm / md | Inter | Roboto Mono |
++| 高級感 / フォーマル | purple | none / sm | IBM Plex Sans JP | Roboto Mono |
++
++### やってはいけない
++
++- **許可リストの外の値を書かない**（例: `primary: "teal"` や `font-pro: "Comic Sans"`）。ステップ 6 のバリデーションを必ず通す
++- **主案を 2 本以上並べない**。ユーザーの意思決定コストが上がる。主案は 1 本のみ、別案は打診だけして求められたときに出す
++- `sparkle.config.json` の `extend.*` や未知のトップレベルキーを勝手に消さない。書き換え対象は `primary` / `font-pro` / `font-mono` / `radius` の 4 キーだけ
++- JSONC（コメント付き config）のコメントを破壊しない。コメントが検出できたら中断してユーザーに判断を仰ぐ
++- `sparkle-design-cli generate` の実行をスキップしない。書き換えただけでは `sparkle-design.css` / `SparkleHead.tsx` は更新されない
++- generate の exit code / 成果物 mtime の確認をスキップしない。失敗時は rollback またはユーザーに明示的にエスカレーション
++
++---
++
++## ユーザー向け説明
++
++このスキルは、目指したい「雰囲気」や「トーン」を自然言語で伝えるだけで、`sparkle.config.json` の **primary カラー / フォント / 角丸** を書き換えて `sparkle-design.css` を再生成します。
++
++使い方の例:
++
++- 「もっとポップな雰囲気にして」
++- 「ビジネスっぽく落ち着かせたい」
++- 「primary を purple にして角丸も強めに」
++- 「日本語が読みやすいフォント構成に切り替えたい」
++
++書き換え前に必ず提案を出すので、内容を確認してから反映できます。選択肢は Figma の Sparkle Design Theme Settings プラグインと同じ集合なので、Figma / 実装の両方が同じテーマで揃います。
+diff --git a/.claude/skills/change-sparkle-config/references/vibe-mapping.md b/.claude/skills/change-sparkle-config/references/vibe-mapping.md
+new file mode 100644
+index 0000000..dbd88f0
+--- /dev/null
++++ b/.claude/skills/change-sparkle-config/references/vibe-mapping.md
+@@ -0,0 +1,110 @@
++# 雰囲気 → sparkle.config.json マッピング
++
++`change-sparkle-config` スキルが参照する拡張マッピング。`SKILL.md` 本体の 3 行代表例で足りないときに、ここを参照して近い雰囲気に当てはめる。
++
++## 許可リスト（必ずここから選ぶ）
++
++**SKILL.md の許可リストと同一**。reference 単独参照でも自己完結できるよう再掲する:
++
++- **primary**: `blue` / `red` / `orange` / `green` / `purple` / `pink` / `yellow`
++- **radius**: `none` / `sm` / `md` / `lg` / `xl` / `full`
++- **font-pro**（proportional 用途 OK なもの）: `BIZ UDPGothic` / `Noto Sans JP` / `IBM Plex Sans JP` / `Inter` / `Roboto` / `Lato` / `Open Sans` / `Montserrat` / `Hiragino Sans`
++- **font-mono**（monospace 用途 OK なもの）: `BIZ UDGothic` / `Noto Sans JP` / `IBM Plex Sans JP` / `Inter` / `Roboto Mono` / `Lato` / `Open Sans` / `Montserrat` / `Hiragino Sans`
++
++> ❌ `BIZ UDPGothic` / `Roboto` を `font-mono` に使わない。❌ `BIZ UDGothic` / `Roboto Mono` を `font-pro` に使わない。
++
++## マッピング表
++
++### 1. ポップ / 元気 / カジュアル
++
++| 項目 | 値 | 理由 |
++|---|---|---|
++| primary | `yellow` / `pink` / `orange` | 明度・彩度が高く陽気な印象 |
++| radius | `xl` / `full` | 丸みを強めると遊び心が出る |
++| font-pro | `Montserrat` / `Noto Sans JP` | 太さのコントラストがはっきりして明朗 |
++| font-mono | `Roboto Mono` | 中立でポップさを邪魔しない |
++
++**発動しそうな要望**: 「ポップに」「元気な感じ」「楽しげ」「カジュアルに」「SNS 向け」
++
++### 2. ビジネスライク / 信頼感
++
++| 項目 | 値 | 理由 |
++|---|---|---|
++| primary | `blue` | 金融・SaaS の定番色。信頼感 |
++| radius | `sm` / `md` | 四角すぎず丸すぎない安心感 |
++| font-pro | `Inter` / `IBM Plex Sans JP` | クリーンで読みやすい |
++| font-mono | `Roboto Mono` | コード・数値の視認性 |
++
++**発動しそうな要望**: 「ビジネスっぽく」「落ち着いた感じ」「社内ツールに合う」「B2B 向け」「真面目に」
++
++### 3. 高級感 / フォーマル / 上質
++
++| 項目 | 値 | 理由 |
++|---|---|---|
++| primary | `purple` | 格式高さを示す伝統色 |
++| radius | `none` / `sm` | シャープで凛とした印象 |
++| font-pro | `IBM Plex Sans JP` | 落ち着いた骨格 |
++| font-mono | `Roboto Mono` | フォーマル文脈を崩さない |
++
++**発動しそうな要望**: 「高級感」「フォーマル」「上品に」「ラグジュアリー」「プレミアム」
++
++### 4. やさしい / 親しみ / 温かみ
++
++| 項目 | 値 | 理由 |
++|---|---|---|
++| primary | `green` / `pink` | 柔らかさ・共感 |
++| radius | `lg` | 角の丸みで優しさが出る |
++| font-pro | `BIZ UDPGothic` / `Lato` | 日本語も親しみやすい字形 |
++| font-mono | `BIZ UDGothic` / `Roboto Mono` | proportional と統一感 |
++
++**発動しそうな要望**: 「やさしく」「親しみやすい」「あたたかい」「教育系」「ヘルスケア」「キッズ向け」
++
++### 5. ミニマル / クリーン
++
++| 項目 | 値 | 理由 |
++|---|---|---|
++| primary | `blue` / `green` | 主張控えめで中立 |
++| radius | `none` / `sm` | 装飾を抑える |
++| font-pro | `Inter` | もっとも中立なサンセリフ |
++| font-mono | `Roboto Mono` | ミニマルと親和性 |
++
++**発動しそうな要望**: 「ミニマル」「クリーン」「シンプルに」「余計な装飾を減らして」
++
++### 6. 日本語読みやすさ重視
++
++| 項目 | 値 | 理由 |
++|---|---|---|
++| primary | （現状維持） | — |
++| radius | （現状維持） | — |
++| font-pro | `BIZ UDPGothic` | UD フォントで可読性最高 |
++| font-mono | `BIZ UDGothic` | pro と統一 |
++
++**発動しそうな要望**: 「日本語を読みやすく」「アクセシビリティ重視」「高齢者向け」「UD フォントで」
++
++### 7. Apple 的洗練 / モダン
++
++| 項目 | 値 | 理由 |
++|---|---|---|
++| primary | `blue` / `purple` | iOS / macOS の標準色文脈 |
++| radius | `lg` / `xl` | iOS の丸み |
++| font-pro | `Hiragino Sans` | Apple 標準フォント |
++| font-mono | `Roboto Mono` | 中立な mono |
++
++**発動しそうな要望**: 「Apple っぽく」「iOS 風」「モダン」「洗練された」
++
++### 8. エネルギッシュ / 行動喚起
++
++| 項目 | 値 | 理由 |
++|---|---|---|
++| primary | `red` / `orange` | アクション色 |
++| radius | `md` | 強さと使いやすさの折衷 |
++| font-pro | `Montserrat` | 力強いサンセリフ |
++| font-mono | `Roboto Mono` | — |
++
++**発動しそうな要望**: 「エネルギッシュ」「行動喚起」「CTA が目立つ」「スポーツ系」「赤系で」
++
++## 使い方
++
++ユーザーの要望が複数の雰囲気に跨る場合は、**主な意図**を汲んで 1 つを主案とし、他は「別案あり」の注記に留める。多選択肢提示はユーザーの意思決定コストを上げるため避ける。
++
++要望が「primary だけ赤に変えて」のように軸を絞っている場合は、要望どおりに **その軸だけ** 変更し、他は現状維持。無関係な軸まで勝手に触らない。
+diff --git a/.claude/skills/setup-sparkle-design/SKILL.md b/.claude/skills/setup-sparkle-design/SKILL.md
+index 1c72a03..f20068c 100644
+--- a/.claude/skills/setup-sparkle-design/SKILL.md
++++ b/.claude/skills/setup-sparkle-design/SKILL.md
+@@ -1,18 +1,16 @@
+ ---
+ name: setup-sparkle-design
+ description: >
+-  sparkle-design（React コンポーネントライブラリ）の導入・セットアップ・
+-  テーマカスタマイズ・コンポーネント選択を支援するスキル。
+-  npm インストール、sparkle-design-cli による CSS 生成、sparkle.config.json のテーマ設定、
+-  アンチパターンガードの導入までをカバーする。
+-  「Sparkle Design」「sparkle-design」「デザインシステム」「コンポーネントライブラリ」
+-  への言及、またはプライマリカラー・フォント・角丸などのテーマカスタマイズの相談、
+-  「どのコンポーネントを使えばいい」といったコンポーネント選択の質問で発動すること。
+-  sparkle.config.json への言及も発動トリガーとする。
++  **未導入プロジェクト向け**の sparkle-design 初期導入・セットアップを支援するスキル。
++  npm インストール、sparkle-design-cli による初回 CSS 生成、sparkle.config.json の新規作成、
++  アンチパターンガードの導入、コンポーネント選択ガイドまでをカバーする。
++  **導入済みプロジェクトでテーマ（primary / font / radius）を変えたい場合は
++  `change-sparkle-config` スキルを使うこと** — この setup スキルは初期セットアップ専用。
++  「Sparkle Design を導入」「sparkle-design をインストール」「デザインシステムをセットアップ」
++  「コンポーネントライブラリを追加」「どのコンポーネントを使えばいい」で発動する。
+   日本語: "Sparkle Designを導入", "sparkle-designをインストール",
+   "sparkle-designをセットアップ", "コンポーネントライブラリを追加",
+-  "デザインシステムをセットアップ", "どのコンポーネントを使えばいい",
+-  "テーマをカスタマイズしたい", "プライマリカラーを変えたい"
++  "デザインシステムをセットアップ", "どのコンポーネントを使えばいい"
+   English: "install sparkle-design", "add sparkle design",
+   "set up sparkle design", "which component should I use"
+ ---
