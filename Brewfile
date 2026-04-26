@@ -1,3 +1,5 @@
+tap "manaflow-ai/cmux"
+
 brew "bat"
 brew "eza"
 brew "fd"
@@ -10,6 +12,7 @@ brew "zoxide"
 brew "zsh-autosuggestions"
 brew "zsh-syntax-highlighting"
 cask "appcleaner"
+cask "cmux"
 cask "font-udev-gothic-nf"
 cask "ghostty"
 cask "orbstack"
