@@ -79,3 +79,10 @@ if [[ -n "${HOMEBREW_PREFIX-}" ]]; then
   unset _as _sh
 fi
 export PATH="$HOME/.local/bin:$PATH"
+
+# bun completions
+[ -s "/Users/shoirhi/.bun/_bun" ] && source "/Users/shoirhi/.bun/_bun"
+
+# bun
+export BUN_INSTALL="$HOME/.bun"
+export PATH="$BUN_INSTALL/bin:$PATH"
