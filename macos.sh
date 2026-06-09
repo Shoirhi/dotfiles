@@ -53,10 +53,10 @@ safe_defaults com.apple.dock show-recents -bool false # 最近使ったアプリ
 safe_defaults com.apple.dock orientation -string "left" # Dockを左側に配置
 safe_defaults com.apple.dock mru-spaces -bool false # Spacesを最近の使用順に並べ替えない
 safe_defaults com.apple.dock expose-group-apps -bool true # Mission Controlでアプリをグループ化
-safe_defaults com.apple.dock wvous-tl-corner -int 0 # 左上: 何もしない
-safe_defaults com.apple.dock wvous-tr-corner -int 0 # 右上: 何もしない
-safe_defaults com.apple.dock wvous-bl-corner -int 2 # 左下ホットコーナー: Mission Control
-safe_defaults com.apple.dock wvous-br-corner -int 13 # 右下ホットコーナー: 画面ロック
+safe_defaults com.apple.dock wvous-tl-corner -int 1 # 左上ホットコーナー: 無効化
+safe_defaults com.apple.dock wvous-tr-corner -int 1 # 右上ホットコーナー: 無効化
+safe_defaults com.apple.dock wvous-bl-corner -int 1 # 左下ホットコーナー: 無効化
+safe_defaults com.apple.dock wvous-br-corner -int 1 # 右下ホットコーナー: 無効化
 safe_defaults com.apple.dock wvous-tl-modifier -int 0
 safe_defaults com.apple.dock wvous-tr-modifier -int 0
 safe_defaults com.apple.dock wvous-bl-modifier -int 0
