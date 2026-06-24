@@ -37,10 +37,7 @@
     "provider": "copilot"
   },
   "agent_servers": {
-    "your_agent": {
-      "type": "custom",
-      "command": "path_to_executable"
-    }
+    
   },
   "autosave": {
     "after_delay": {
