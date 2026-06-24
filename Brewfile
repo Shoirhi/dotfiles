@@ -1,6 +1,7 @@
 brew "bat"
 brew "eza"
 brew "fd"
+brew "gh"
 brew "neovim"
 brew "node"
 brew "ripgrep"
