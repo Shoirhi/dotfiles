@@ -85,4 +85,21 @@ link_file "$DOTFILES_DIR/claude/rules" "$HOME/.claude/rules"
 link_file "$DOTFILES_DIR/claude/skills" "$HOME/.claude/skills"
 link_file "$DOTFILES_DIR/claude/agents" "$HOME/.claude/agents"
 
+# 自動アップデート用 LaunchAgent（毎日12時に brew/claude を更新）
+echo "Setting up auto-update LaunchAgent..."
+LAUNCH_AGENTS_DIR="$HOME/Library/LaunchAgents"
+PLIST_LABEL="com.shoirhi.dotfiles.autoupdate"
+PLIST_SRC="$DOTFILES_DIR/launchd/$PLIST_LABEL.plist"
+PLIST_DEST="$LAUNCH_AGENTS_DIR/$PLIST_LABEL.plist"
+mkdir -p "$LAUNCH_AGENTS_DIR"
+# plist は絶対パスが必要なため、テンプレートの __HOME__ を展開して配置する
+sed "s|__HOME__|$HOME|g" "$PLIST_SRC" >"$PLIST_DEST"
+# 既存のジョブがあれば一度アンロードしてから再ロード（設定変更を反映）
+launchctl unload "$PLIST_DEST" 2>/dev/null || true
+if launchctl load "$PLIST_DEST"; then
+  echo "Loaded LaunchAgent: $PLIST_LABEL"
+else
+  echo "Warning: Failed to load LaunchAgent: $PLIST_LABEL"
+fi
+
 echo "Setup complete!"
