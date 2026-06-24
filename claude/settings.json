@@ -155,7 +155,8 @@
       "Bash(npm publish*)",
       "Bash(rm:*)"
     ],
-    "disableBypassPermissionsMode": "disable"
+    "disableBypassPermissionsMode": "disable",
+    "defaultMode": "auto"
   },
   "model": "opus",
   "enableAllProjectMcpServers": false,
@@ -236,7 +237,7 @@
   },
   "language": "Japanese",
   "sandbox": {
-    "enabled": true,
+    "enabled": false,
     "autoAllowBashIfSandboxed": true,
     "allowedDomains": [
       "api.figma.com",
