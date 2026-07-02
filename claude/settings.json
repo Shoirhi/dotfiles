@@ -158,33 +158,10 @@
     "defaultMode": "auto",
     "disableBypassPermissionsMode": "disable"
   },
-  "model": "opus",
+  "model": "sonnet",
   "enableAllProjectMcpServers": false,
   "hooks": {
-    "Notification": [
-      {
-        "matcher": "permission_prompt",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "osascript -e 'display notification \"承認が必要です\" with title \"Claude Code\" subtitle \"Permission Required\" sound name \"Ping\"'",
-            "timeout": 5
-          }
-        ]
-      }
-    ],
-    "Stop": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "osascript -e 'display notification \"タスクが完了しました\" with title \"Claude Code\" subtitle \"Task Complete\" sound name \"Glass\"'",
-            "timeout": 5
-          }
-        ]
-      }
-    ],
+    "Notification": [],
     "PostToolUse": [
       {
         "matcher": "Edit",
@@ -255,5 +232,5 @@
   "effortLevel": "high",
   "autoMemoryEnabled": false,
   "theme": "dark-ansi",
-  "preferredNotifChannel": "auto"
+  "preferredNotifChannel": "terminal_bell"
 }
